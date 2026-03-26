@@ -15,7 +15,11 @@
 - **feat:** LLDP/CDP neighbor discovery for automatic link detection
 - **feat:** HTMX web UI with dark theme (matches stormd/mkube design)
 - **feat:** WebSocket live updates for alerts and discovery events
-- **feat:** native_db (redb) embedded database — pure Rust, no C dependencies
+- **feat:** redb embedded database — pure Rust, no C dependencies
 - **feat:** Configurable retention cleanup for probes, metrics, alerts
 - **feat:** Single static binary for scratch containers
 - **feat:** TOML configuration with sensible defaults
+- **fix:** Replace native_db with redb (native_db derive macros incompatible)
+- **fix:** Askama templates — use display helper methods instead of arithmetic
+- **fix:** socket2 ICMP — use libc::SOCK_RAW and MaybeUninit buffers
+- **fix:** Resolve all compiler warnings (unused imports)
