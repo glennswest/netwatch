@@ -314,6 +314,68 @@ td.mono { font-family: var(--font-mono); font-size: 0.85rem; }
 .mt-1 { margin-top: 0.5rem; }
 .mb-1 { margin-bottom: 0.5rem; }
 
+/* Network sections */
+.network-section {
+    margin-bottom: 1rem;
+}
+
+.network-section > .table-wrap {
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+}
+
+.network-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+    list-style: none;
+}
+
+.network-header::-webkit-details-marker { display: none; }
+
+.network-header::before {
+    content: "\25B6";
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    transition: transform 0.15s;
+}
+
+details[open] > .network-header::before {
+    transform: rotate(90deg);
+}
+
+.network-header:hover { background: var(--bg-hover); }
+
+.network-name {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.network-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-left: auto;
+    font-size: 0.85rem;
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 3rem 1rem;
+    font-style: italic;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .nav-links { gap: 0; overflow-x: auto; }

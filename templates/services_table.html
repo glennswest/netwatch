@@ -1,16 +1,47 @@
-{% if services.is_empty() %}
-<tr class="empty-row"><td colspan="8">No services configured</td></tr>
-{% else %}
-{% for s in services %}
-<tr>
-    <td><span class="badge {{ s.status.badge_class() }}">{{ s.status.as_str() }}</span></td>
-    <td>{{ s.service.name }}</td>
-    <td><a href="/ui/devices/{{ s.service.device_id }}">{{ s.device_name }}</a></td>
-    <td class="mono">{{ s.device_ip }}</td>
-    <td class="mono">{{ s.service.probe_type.as_str() }}</td>
-    <td class="mono">{% match s.service.port %}{% when Some with (p) %}{{ p }}{% when None %}-{% endmatch %}</td>
-    <td class="mono">{{ s.service.interval_secs }}s</td>
-    <td class="mono">{{ s.latency_ms() }}</td>
-</tr>
+{% for net in networks %}
+<details class="network-section" open>
+    <summary class="network-header">
+        <span class="network-name">{{ net.name }}</span>
+        {% if !net.cidr.is_empty() %}<span class="mono text-muted">{{ net.cidr }}</span>{% endif %}
+        <div class="network-badges">
+            <span class="badge badge-info">{{ net.services.len() }} svc</span>
+            <span class="text-success">{{ net.up }} up</span>
+            {% if net.down > 0 %}<span class="text-danger">{{ net.down }} down</span>{% endif %}
+        </div>
+    </summary>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Service</th>
+                    <th>Device</th>
+                    <th>IP</th>
+                    <th>Type</th>
+                    <th>Port</th>
+                    <th>Interval</th>
+                    <th>Latency</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in net.services %}
+                <tr>
+                    <td><span class="badge {{ s.status.badge_class() }}">{{ s.status.as_str() }}</span></td>
+                    <td>{{ s.service.name }}</td>
+                    <td><a href="/ui/devices/{{ s.service.device_id }}">{{ s.device_name }}</a></td>
+                    <td class="mono">{{ s.device_ip }}</td>
+                    <td class="mono">{{ s.service.probe_type.as_str() }}</td>
+                    <td class="mono">{% match s.service.port %}{% when Some with (p) %}{{ p }}{% when None %}-{% endmatch %}</td>
+                    <td class="mono">{{ s.service.interval_secs }}s</td>
+                    <td class="mono">{{ s.latency_ms() }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
 {% endfor %}
+
+{% if networks.is_empty() %}
+<div class="empty-state">No services configured</div>
 {% endif %}

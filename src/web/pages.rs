@@ -7,6 +7,166 @@ use axum::{
     extract::{Path, State},
     response::{IntoResponse, Redirect},
 };
+use std::collections::HashMap;
+
+// ── Network grouping helpers ──
+
+fn group_devices_by_network(devices: Vec<DeviceStatus>, subnets: &[Subnet]) -> Vec<NetworkGroup> {
+    let mut group_map: HashMap<String, (String, String, Vec<DeviceStatus>)> = HashMap::new();
+
+    // Initialize from known subnets (preserves order later via sort)
+    for s in subnets {
+        group_map.insert(s.name.clone(), (s.name.clone(), s.cidr.clone(), Vec::new()));
+    }
+
+    for d in devices {
+        let mut matched = None;
+        if let Ok(addr) = d.device.ip.parse::<std::net::IpAddr>() {
+            for s in subnets {
+                if let Ok(net) = s.cidr.parse::<ipnetwork::IpNetwork>() {
+                    if net.contains(addr) {
+                        matched = Some(s.name.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        let key = matched.unwrap_or_else(|| "Other".to_string());
+        group_map
+            .entry(key.clone())
+            .or_insert_with(|| (key, String::new(), Vec::new()))
+            .2
+            .push(d);
+    }
+
+    let mut groups: Vec<NetworkGroup> = group_map
+        .into_values()
+        .filter(|(_, _, devs)| !devs.is_empty())
+        .map(|(name, cidr, devices)| {
+            let up = devices.iter().filter(|d| d.status == ProbeStatus::Up).count();
+            let down = devices
+                .iter()
+                .filter(|d| d.status == ProbeStatus::Down)
+                .count();
+            let svc_up: usize = devices.iter().map(|d| d.services_up).sum();
+            let svc_total: usize = devices.iter().map(|d| d.services_total).sum();
+            NetworkGroup {
+                name,
+                cidr,
+                devices,
+                up,
+                down,
+                svc_up,
+                svc_total,
+            }
+        })
+        .collect();
+
+    groups.sort_by(|a, b| {
+        if a.name == "Other" {
+            std::cmp::Ordering::Greater
+        } else if b.name == "Other" {
+            std::cmp::Ordering::Less
+        } else {
+            a.name.cmp(&b.name)
+        }
+    });
+
+    groups
+}
+
+pub struct ServiceNetworkGroup {
+    pub name: String,
+    pub cidr: String,
+    pub services: Vec<ServiceRow>,
+    pub up: usize,
+    pub down: usize,
+}
+
+fn group_services_by_network(
+    services: Vec<ServiceRow>,
+    subnets: &[Subnet],
+) -> Vec<ServiceNetworkGroup> {
+    let mut group_map: HashMap<String, (String, String, Vec<ServiceRow>)> = HashMap::new();
+
+    for s in subnets {
+        group_map.insert(s.name.clone(), (s.name.clone(), s.cidr.clone(), Vec::new()));
+    }
+
+    for svc in services {
+        let mut matched = None;
+        if let Ok(addr) = svc.device_ip.parse::<std::net::IpAddr>() {
+            for s in subnets {
+                if let Ok(net) = s.cidr.parse::<ipnetwork::IpNetwork>() {
+                    if net.contains(addr) {
+                        matched = Some(s.name.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        let key = matched.unwrap_or_else(|| "Other".to_string());
+        group_map
+            .entry(key.clone())
+            .or_insert_with(|| (key, String::new(), Vec::new()))
+            .2
+            .push(svc);
+    }
+
+    let mut groups: Vec<ServiceNetworkGroup> = group_map
+        .into_values()
+        .filter(|(_, _, svcs)| !svcs.is_empty())
+        .map(|(name, cidr, services)| {
+            let up = services
+                .iter()
+                .filter(|s| s.status == ProbeStatus::Up)
+                .count();
+            let down = services
+                .iter()
+                .filter(|s| s.status == ProbeStatus::Down)
+                .count();
+            ServiceNetworkGroup {
+                name,
+                cidr,
+                services,
+                up,
+                down,
+            }
+        })
+        .collect();
+
+    groups.sort_by(|a, b| {
+        if a.name == "Other" {
+            std::cmp::Ordering::Greater
+        } else if b.name == "Other" {
+            std::cmp::Ordering::Less
+        } else {
+            a.name.cmp(&b.name)
+        }
+    });
+
+    groups
+}
+
+fn build_service_rows(state: &AppState) -> Vec<ServiceRow> {
+    let all_services = state.db.list_services().unwrap_or_default();
+    let mut rows = Vec::new();
+    for svc in all_services {
+        let device = state.db.get_device(&svc.device_id).ok().flatten();
+        let probe = state.db.get_latest_probe(&svc.id).ok().flatten();
+        rows.push(ServiceRow {
+            device_name: device.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
+            device_ip: device.as_ref().map(|d| d.ip.clone()).unwrap_or_default(),
+            status: probe
+                .as_ref()
+                .map(|p| p.status)
+                .unwrap_or(ProbeStatus::Unknown),
+            latency_us: probe.as_ref().and_then(|p| p.latency_us),
+            service: svc,
+        });
+    }
+    rows
+}
 
 // ── Redirect ──
 
@@ -27,8 +187,8 @@ struct DashboardTemplate {
     services_up: usize,
     services_down: usize,
     alert_count: usize,
-    subnet_count: usize,
-    devices: Vec<DeviceStatus>,
+    network_count: usize,
+    networks: Vec<NetworkGroup>,
     recent_alerts: Vec<Alert>,
 }
 
@@ -37,29 +197,37 @@ pub async fn dashboard(State(state): State<AppState>) -> impl IntoResponse {
     let alerts = state.db.list_active_alerts().unwrap_or_default();
     let subnets = state.db.list_subnets().unwrap_or_default();
 
-    let devices_up = statuses.iter().filter(|d| d.status == ProbeStatus::Up).count();
-    let devices_down = statuses.iter().filter(|d| d.status == ProbeStatus::Down).count();
+    let devices_up = statuses
+        .iter()
+        .filter(|d| d.status == ProbeStatus::Up)
+        .count();
+    let devices_down = statuses
+        .iter()
+        .filter(|d| d.status == ProbeStatus::Down)
+        .count();
     let svc_up: usize = statuses.iter().map(|d| d.services_up).sum();
     let svc_down: usize = statuses.iter().map(|d| d.services_down).sum();
     let svc_total: usize = statuses.iter().map(|d| d.services_total).sum();
+    let device_count = statuses.len();
+
+    let networks = group_devices_by_network(statuses, &subnets);
 
     HtmlTemplate(DashboardTemplate {
         active: "dashboard".into(),
-        device_count: statuses.len(),
+        device_count,
         devices_up,
         devices_down,
         service_count: svc_total,
         services_up: svc_up,
         services_down: svc_down,
         alert_count: alerts.len(),
-        subnet_count: subnets.len(),
-        devices: statuses,
+        network_count: networks.len(),
+        networks,
         recent_alerts: alerts.into_iter().take(10).collect(),
     })
 }
 
 pub async fn dashboard_cards_partial(State(state): State<AppState>) -> impl IntoResponse {
-    // Re-render just the dashboard content for HTMX refresh
     dashboard(State(state)).await
 }
 
@@ -69,26 +237,30 @@ pub async fn dashboard_cards_partial(State(state): State<AppState>) -> impl Into
 #[template(path = "devices.html")]
 struct DevicesTemplate {
     active: String,
-    devices: Vec<DeviceStatus>,
+    networks: Vec<NetworkGroup>,
 }
 
 pub async fn devices(State(state): State<AppState>) -> impl IntoResponse {
     let statuses = state.db.get_device_statuses().unwrap_or_default();
+    let subnets = state.db.list_subnets().unwrap_or_default();
+    let networks = group_devices_by_network(statuses, &subnets);
     HtmlTemplate(DevicesTemplate {
         active: "devices".into(),
-        devices: statuses,
+        networks,
     })
 }
 
 #[derive(Template)]
 #[template(path = "devices_table.html")]
 struct DevicesTableTemplate {
-    devices: Vec<DeviceStatus>,
+    networks: Vec<NetworkGroup>,
 }
 
 pub async fn devices_table_partial(State(state): State<AppState>) -> impl IntoResponse {
     let statuses = state.db.get_device_statuses().unwrap_or_default();
-    HtmlTemplate(DevicesTableTemplate { devices: statuses })
+    let subnets = state.db.list_subnets().unwrap_or_default();
+    let networks = group_devices_by_network(statuses, &subnets);
+    HtmlTemplate(DevicesTableTemplate { networks })
 }
 
 // ── Device Detail ──
@@ -129,8 +301,14 @@ pub async fn device_detail(
         _ => return Redirect::to("/ui/devices").into_response(),
     };
 
-    let interfaces = state.db.list_interfaces_for_device(&id).unwrap_or_default();
-    let services = state.db.list_services_for_device(&id).unwrap_or_default();
+    let interfaces = state
+        .db
+        .list_interfaces_for_device(&id)
+        .unwrap_or_default();
+    let services = state
+        .db
+        .list_services_for_device(&id)
+        .unwrap_or_default();
 
     let mut svc_statuses = Vec::new();
     let mut overall_down = false;
@@ -142,8 +320,12 @@ pub async fn device_detail(
             Some(p) => (p.status, p.latency_us, p.error),
             None => (ProbeStatus::Unknown, None, None),
         };
-        if status == ProbeStatus::Down { overall_down = true; }
-        if status == ProbeStatus::Up { any_up = true; }
+        if status == ProbeStatus::Down {
+            overall_down = true;
+        }
+        if status == ProbeStatus::Up {
+            any_up = true;
+        }
         svc_statuses.push(ServiceWithStatus {
             service: svc,
             status,
@@ -176,7 +358,8 @@ pub async fn device_detail(
         interfaces,
         services: svc_statuses,
         recent_alerts: device_alerts,
-    }).into_response()
+    })
+    .into_response()
 }
 
 // ── Network Map ──
@@ -194,7 +377,6 @@ pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
     let links = state.db.list_links().unwrap_or_default();
     let positions = state.db.list_positions().unwrap_or_default();
 
-    // Build map data
     let mut map_devices = Vec::new();
     for ds in &statuses {
         let pos = positions
@@ -251,7 +433,7 @@ pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
 #[template(path = "services.html")]
 struct ServicesTemplate {
     active: String,
-    services: Vec<ServiceRow>,
+    networks: Vec<ServiceNetworkGroup>,
 }
 
 pub struct ServiceRow {
@@ -272,53 +454,26 @@ impl ServiceRow {
 }
 
 pub async fn services(State(state): State<AppState>) -> impl IntoResponse {
-    let all_services = state.db.list_services().unwrap_or_default();
-    let mut rows = Vec::new();
-
-    for svc in all_services {
-        let device = state
-            .db
-            .get_device(&svc.device_id)
-            .ok()
-            .flatten();
-        let probe = state.db.get_latest_probe(&svc.id).ok().flatten();
-
-        rows.push(ServiceRow {
-            device_name: device.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
-            device_ip: device.as_ref().map(|d| d.ip.clone()).unwrap_or_default(),
-            status: probe.as_ref().map(|p| p.status).unwrap_or(ProbeStatus::Unknown),
-            latency_us: probe.as_ref().and_then(|p| p.latency_us),
-            service: svc,
-        });
-    }
-
+    let rows = build_service_rows(&state);
+    let subnets = state.db.list_subnets().unwrap_or_default();
+    let networks = group_services_by_network(rows, &subnets);
     HtmlTemplate(ServicesTemplate {
         active: "services".into(),
-        services: rows,
+        networks,
     })
 }
 
 #[derive(Template)]
 #[template(path = "services_table.html")]
 struct ServicesTableTemplate {
-    services: Vec<ServiceRow>,
+    networks: Vec<ServiceNetworkGroup>,
 }
 
 pub async fn services_table_partial(State(state): State<AppState>) -> impl IntoResponse {
-    let all_services = state.db.list_services().unwrap_or_default();
-    let mut rows = Vec::new();
-    for svc in all_services {
-        let device = state.db.get_device(&svc.device_id).ok().flatten();
-        let probe = state.db.get_latest_probe(&svc.id).ok().flatten();
-        rows.push(ServiceRow {
-            device_name: device.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
-            device_ip: device.as_ref().map(|d| d.ip.clone()).unwrap_or_default(),
-            status: probe.as_ref().map(|p| p.status).unwrap_or(ProbeStatus::Unknown),
-            latency_us: probe.as_ref().and_then(|p| p.latency_us),
-            service: svc,
-        });
-    }
-    HtmlTemplate(ServicesTableTemplate { services: rows })
+    let rows = build_service_rows(&state);
+    let subnets = state.db.list_subnets().unwrap_or_default();
+    let networks = group_services_by_network(rows, &subnets);
+    HtmlTemplate(ServicesTableTemplate { networks })
 }
 
 // ── Alerts ──
@@ -363,7 +518,12 @@ pub async fn alerts_table_partial(State(state): State<AppState>) -> impl IntoRes
     let all_alerts = state.db.list_alerts(200).unwrap_or_default();
     let mut rows = Vec::new();
     for alert in all_alerts {
-        let device_name = state.db.get_device(&alert.device_id).ok().flatten().map(|d| d.name);
+        let device_name = state
+            .db
+            .get_device(&alert.device_id)
+            .ok()
+            .flatten()
+            .map(|d| d.name);
         rows.push(AlertRow { alert, device_name });
     }
     HtmlTemplate(AlertsTableTemplate { alerts: rows })

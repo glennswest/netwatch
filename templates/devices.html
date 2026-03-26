@@ -8,7 +8,7 @@
 
 <div class="form-section">
     <h3>Add Device</h3>
-    <form hx-post="/api/devices" hx-target="#devices-table-body" hx-swap="innerHTML"
+    <form hx-post="/api/devices" hx-target="#devices-content" hx-swap="innerHTML"
           hx-on::after-request="if(event.detail.successful) this.reset()">
         <div class="form-row">
             <div class="form-group">
@@ -43,23 +43,59 @@
     </form>
 </div>
 
-<div class="table-wrap">
-    <table>
-        <thead>
-            <tr>
-                <th>Status</th>
-                <th>Name</th>
-                <th>IP</th>
-                <th>Type</th>
-                <th>Vendor</th>
-                <th>Services</th>
-                <th>Latency</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody id="devices-table-body" hx-get="/ui/partials/devices-table" hx-trigger="every 10s" hx-indicator="#devices-loading">
-            {% include "devices_table.html" %}
-        </tbody>
-    </table>
+<div id="devices-content" hx-get="/ui/partials/devices-table" hx-trigger="every 10s" hx-indicator="#devices-loading">
+{% for net in networks %}
+<details class="network-section" open>
+    <summary class="network-header">
+        <span class="network-name">{{ net.name }}</span>
+        {% if !net.cidr.is_empty() %}<span class="mono text-muted">{{ net.cidr }}</span>{% endif %}
+        <div class="network-badges">
+            <span class="badge badge-info">{{ net.device_count() }}</span>
+            <span class="text-success">{{ net.up }} up</span>
+            {% if net.down > 0 %}<span class="text-danger">{{ net.down }} down</span>{% endif %}
+        </div>
+    </summary>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Name</th>
+                    <th>IP</th>
+                    <th>Type</th>
+                    <th>Vendor</th>
+                    <th>Services</th>
+                    <th>Latency</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in net.devices %}
+                <tr>
+                    <td><span class="badge {{ d.status.badge_class() }}">{{ d.status.as_str() }}</span></td>
+                    <td><a href="/ui/devices/{{ d.device.id }}">{{ d.device.name }}</a></td>
+                    <td class="mono">{{ d.device.ip }}</td>
+                    <td>{{ d.device.device_type.as_str() }}</td>
+                    <td>{% match d.device.vendor %}{% when Some with (v) %}{{ v }}{% when None %}-{% endmatch %}</td>
+                    <td>{{ d.services_up }}/{{ d.services_total }}</td>
+                    <td class="mono">{{ d.latency_ms() }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger"
+                                hx-delete="/api/devices/{{ d.device.id }}"
+                                hx-target="closest tr"
+                                hx-swap="outerHTML"
+                                hx-confirm="Delete {{ d.device.name }}?">Del</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
+{% endfor %}
+
+{% if networks.is_empty() %}
+<div class="empty-state">No devices discovered yet</div>
+{% endif %}
 </div>
 {% endblock %}

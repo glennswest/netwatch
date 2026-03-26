@@ -1,7 +1,7 @@
 # Netwatch configuration
 
 [server]
-listen = "0.0.0.0:8080"
+listen = "0.0.0.0:80"
 data_dir = "/var/lib/netwatch"
 
 [discovery]

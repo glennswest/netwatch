@@ -29,40 +29,52 @@
         <div class="card-sub">unacknowledged</div>
     </div>
     <div class="card">
-        <div class="card-label">Subnets</div>
-        <div class="card-value">{{ subnet_count }}</div>
+        <div class="card-label">Networks</div>
+        <div class="card-value">{{ network_count }}</div>
         <div class="card-sub">monitored</div>
     </div>
 </div>
 
-{% if !devices.is_empty() %}
-<div class="table-wrap">
-    <table>
-        <thead>
-            <tr>
-                <th>Status</th>
-                <th>Name</th>
-                <th>IP</th>
-                <th>Type</th>
-                <th>Services</th>
-                <th>Latency</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for d in devices %}
-            <tr>
-                <td><span class="badge {{ d.status.badge_class() }}">{{ d.status.as_str() }}</span></td>
-                <td><a href="/ui/devices/{{ d.device.id }}">{{ d.device.name }}</a></td>
-                <td class="mono">{{ d.device.ip }}</td>
-                <td>{{ d.device.device_type.as_str() }}</td>
-                <td>{{ d.services_up }}/{{ d.services_total }}</td>
-                <td class="mono">{{ d.latency_ms() }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endif %}
+{% for net in networks %}
+<details class="network-section" open>
+    <summary class="network-header">
+        <span class="network-name">{{ net.name }}</span>
+        {% if !net.cidr.is_empty() %}<span class="mono text-muted">{{ net.cidr }}</span>{% endif %}
+        <div class="network-badges">
+            <span class="badge badge-info">{{ net.device_count() }}</span>
+            <span class="text-success">{{ net.up }} up</span>
+            {% if net.down > 0 %}<span class="text-danger">{{ net.down }} down</span>{% endif %}
+            <span class="text-muted">{{ net.svc_up }}/{{ net.svc_total }} svc</span>
+        </div>
+    </summary>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Name</th>
+                    <th>IP</th>
+                    <th>Type</th>
+                    <th>Services</th>
+                    <th>Latency</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in net.devices %}
+                <tr>
+                    <td><span class="badge {{ d.status.badge_class() }}">{{ d.status.as_str() }}</span></td>
+                    <td><a href="/ui/devices/{{ d.device.id }}">{{ d.device.name }}</a></td>
+                    <td class="mono">{{ d.device.ip }}</td>
+                    <td>{{ d.device.device_type.as_str() }}</td>
+                    <td>{{ d.services_up }}/{{ d.services_total }}</td>
+                    <td class="mono">{{ d.latency_ms() }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</details>
+{% endfor %}
 
 {% if !recent_alerts.is_empty() %}
 <h2 class="section-title">Recent Alerts</h2>

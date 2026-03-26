@@ -28,3 +28,6 @@
 - **feat:** Deploy config (stormd-config.toml, netwatch.toml with all subnets)
 - **feat:** mkube pod spec with auto-update and DNS alias (netwatch.gt.lo)
 - **chore:** Deployed to MikroTik via mkube at 192.168.200.23
+- **feat:** Network-organized UI — devices and services grouped by subnet
+- **feat:** Collapsible per-network sections with summary badges (devices/up/down/svc)
+- **fix:** Changed default listen port from 8080 to 80

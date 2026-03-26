@@ -344,6 +344,22 @@ pub struct DeviceStatus {
     pub position: Option<MapPosition>,
 }
 
+pub struct NetworkGroup {
+    pub name: String,
+    pub cidr: String,
+    pub devices: Vec<DeviceStatus>,
+    pub up: usize,
+    pub down: usize,
+    pub svc_up: usize,
+    pub svc_total: usize,
+}
+
+impl NetworkGroup {
+    pub fn device_count(&self) -> usize {
+        self.devices.len()
+    }
+}
+
 impl DeviceStatus {
     pub fn latency_ms(&self) -> String {
         match self.latency_us {

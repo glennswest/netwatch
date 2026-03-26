@@ -106,7 +106,7 @@ fn default_server() -> ServerConfig {
     }
 }
 
-fn default_listen() -> String { "0.0.0.0:8080".into() }
+fn default_listen() -> String { "0.0.0.0:80".into() }
 fn default_data_dir() -> PathBuf { PathBuf::from("/var/lib/netwatch") }
 fn default_discovery_interval() -> u64 { 300 }
 fn default_community() -> String { "public".into() }
