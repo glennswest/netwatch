@@ -19,3 +19,8 @@ temp/
 netwatch.db
 netwatch.db-wal
 netwatch.db-shm
+*.redb
+
+# Build artifacts in repo root (binaries copied for container builds)
+/stormd
+/netwatch

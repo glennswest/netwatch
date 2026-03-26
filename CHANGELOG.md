@@ -23,3 +23,8 @@
 - **fix:** Askama templates — use display helper methods instead of arithmetic
 - **fix:** socket2 ICMP — use libc::SOCK_RAW and MaybeUninit buffers
 - **fix:** Resolve all compiler warnings (unused imports)
+- **feat:** ARM64 cross-compilation + stormdbase container deployment
+- **feat:** Containerfile using stormd as PID 1 supervisor
+- **feat:** Deploy config (stormd-config.toml, netwatch.toml with all subnets)
+- **feat:** mkube pod spec with auto-update and DNS alias (netwatch.gt.lo)
+- **chore:** Deployed to MikroTik via mkube at 192.168.200.23
