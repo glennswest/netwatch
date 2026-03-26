@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}{{ device.name }} — Netwatch{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>
+        <span class="badge {{ status.badge_class() }}">{{ status.as_str() }}</span>
+        {{ device.name }}
+    </h1>
+    <a href="/ui/devices" class="btn btn-sm">Back to Devices</a>
+</div>
+
+<div class="card-grid">
+    <div class="card">
+        <div class="card-label">IP Address</div>
+        <div class="card-value" style="font-size: 1.2rem; font-family: var(--font-mono);">{{ device.ip }}</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Type</div>
+        <div class="card-value" style="font-size: 1.2rem;">{{ device.device_type.as_str() }}</div>
+        <div class="card-sub">{% match device.vendor %}{% when Some with (v) %}{{ v }}{% when None %}unknown vendor{% endmatch %}</div>
+    </div>
+    <div class="card">
+        <div class="card-label">SNMP</div>
+        <div class="card-value" style="font-size: 1.2rem;">v{{ device.snmp_version }}</div>
+        <div class="card-sub">{% match device.snmp_community %}{% when Some with (c) %}{{ c }}{% when None %}no community{% endmatch %}</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Location</div>
+        <div class="card-value" style="font-size: 1rem;">{% match device.location %}{% when Some with (l) %}{{ l }}{% when None %}-{% endmatch %}</div>
+    </div>
+</div>
+
+{% match device.sys_descr %}
+{% when Some with (desc) %}
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-label">System Description</div>
+    <div class="mono" style="font-size: 0.85rem; word-break: break-all;">{{ desc }}</div>
+</div>
+{% when None %}
+{% endmatch %}
+
+{% if !services.is_empty() %}
+<h2 class="section-title">Services</h2>
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Port</th>
+                <th>Latency</th>
+                <th>Error</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in services %}
+            <tr>
+                <td><span class="badge {{ s.status.badge_class() }}">{{ s.status.as_str() }}</span></td>
+                <td>{{ s.service.name }}</td>
+                <td class="mono">{{ s.service.probe_type.as_str() }}</td>
+                <td class="mono">{% match s.service.port %}{% when Some with (p) %}{{ p }}{% when None %}-{% endmatch %}</td>
+                <td class="mono">{% match s.latency_us %}{% when Some with (v) %}{{ v / 1000 }}ms{% when None %}-{% endmatch %}</td>
+                <td class="text-muted">{% match s.last_error %}{% when Some with (e) %}{{ e }}{% when None %}{% endmatch %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if !interfaces.is_empty() %}
+<h2 class="section-title">Interfaces</h2>
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Name</th>
+                <th>Index</th>
+                <th>Speed</th>
+                <th>MAC</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for iface in interfaces %}
+            <tr>
+                <td><span class="badge {% if iface.status == "up" %}badge-success{% elif iface.status == "down" %}badge-danger{% else %}badge-info{% endif %}">{{ iface.status }}</span></td>
+                <td>{{ iface.name }}</td>
+                <td class="mono">{% match iface.if_index %}{% when Some with (i) %}{{ i }}{% when None %}-{% endmatch %}</td>
+                <td class="mono">{% match iface.speed_mbps %}{% when Some with (s) %}{% if s >= 1000 %}{{ s / 1000 }}G{% else %}{{ s }}M{% endif %}{% when None %}-{% endmatch %}</td>
+                <td class="mono">{% match iface.mac %}{% when Some with (m) %}{{ m }}{% when None %}-{% endmatch %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if !recent_alerts.is_empty() %}
+<h2 class="section-title">Recent Alerts</h2>
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Severity</th>
+                <th>Message</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in recent_alerts %}
+            <tr>
+                <td><span class="badge {{ a.severity.badge_class() }}">{{ a.severity.as_str() }}</span></td>
+                <td>{{ a.message }}</td>
+                <td class="mono">{{ a.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Performance — Netwatch{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Performance</h1>
+</div>
+
+<div class="form-section">
+    <div class="form-row">
+        <div class="form-group">
+            <label>Device</label>
+            <select id="perf-device" onchange="loadMetrics()">
+                <option value="">Select a device...</option>
+                {% for d in devices %}
+                <option value="{{ d.id }}">{{ d.name }} ({{ d.ip }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Metric</label>
+            <select id="perf-metric" onchange="loadMetrics()">
+                <option value="icmp_latency_us">Ping Latency</option>
+                <option value="tcp_latency_us">TCP Latency</option>
+                <option value="http_latency_us">HTTP Latency</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Points</label>
+            <select id="perf-limit" onchange="loadMetrics()">
+                <option value="50">50</option>
+                <option value="100" selected>100</option>
+                <option value="200">200</option>
+                <option value="500">500</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="padding: 1rem;">
+    <canvas id="perf-chart" height="300"></canvas>
+    <p id="perf-empty" class="text-muted" style="text-align:center;padding:3rem;">Select a device to view performance data</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let perfChart = null;
+
+async function loadMetrics() {
+    const deviceId = document.getElementById('perf-device').value;
+    const metric = document.getElementById('perf-metric').value;
+    const limit = document.getElementById('perf-limit').value;
+
+    if (!deviceId) return;
+
+    const resp = await fetch(`/api/devices/${deviceId}/metrics?metric=${metric}&limit=${limit}`);
+    const data = await resp.json();
+
+    document.getElementById('perf-empty').style.display = data.length ? 'none' : 'block';
+
+    const labels = data.map(m => {
+        const d = new Date(m.timestamp);
+        return d.toLocaleTimeString();
+    });
+
+    const values = data.map(m => {
+        if (metric.endsWith('_latency_us')) return m.value / 1000; // ms
+        return m.value;
+    });
+
+    const yLabel = metric.endsWith('_latency_us') ? 'Latency (ms)' : 'Value';
+
+    if (perfChart) perfChart.destroy();
+
+    perfChart = new Chart(document.getElementById('perf-chart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: yLabel,
+                data: values,
+                borderColor: '#5b8af5',
+                backgroundColor: 'rgba(91,138,245,0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#9ca0b0' } }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#6b7084', maxTicksLimit: 20 },
+                    grid: { color: '#242837' }
+                },
+                y: {
+                    ticks: { color: '#6b7084' },
+                    grid: { color: '#242837' },
+                    beginAtZero: true,
+                    title: { display: true, text: yLabel, color: '#9ca0b0' }
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

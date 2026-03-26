@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Netwatch{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <span class="htmx-indicator" id="dash-loading">refreshing...</span>
+</div>
+
+<div class="card-grid" hx-get="/ui/" hx-trigger="every 10s" hx-select=".card-grid" hx-target="this" hx-swap="outerHTML" hx-indicator="#dash-loading">
+    <div class="card">
+        <div class="card-label">Devices</div>
+        <div class="card-value">{{ device_count }}</div>
+        <div class="card-sub">
+            <span class="text-success">{{ devices_up }} up</span>
+            {% if devices_down > 0 %}<span class="text-danger"> / {{ devices_down }} down</span>{% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-label">Services</div>
+        <div class="card-value">{{ service_count }}</div>
+        <div class="card-sub">
+            <span class="text-success">{{ services_up }} up</span>
+            {% if services_down > 0 %}<span class="text-danger"> / {{ services_down }} down</span>{% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-label">Active Alerts</div>
+        <div class="card-value{% if alert_count > 0 %} text-danger{% endif %}">{{ alert_count }}</div>
+        <div class="card-sub">unacknowledged</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Subnets</div>
+        <div class="card-value">{{ subnet_count }}</div>
+        <div class="card-sub">monitored</div>
+    </div>
+</div>
+
+{% if !devices.is_empty() %}
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Name</th>
+                <th>IP</th>
+                <th>Type</th>
+                <th>Services</th>
+                <th>Latency</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in devices %}
+            <tr>
+                <td><span class="badge {{ d.status.badge_class() }}">{{ d.status.as_str() }}</span></td>
+                <td><a href="/ui/devices/{{ d.device.id }}">{{ d.device.name }}</a></td>
+                <td class="mono">{{ d.device.ip }}</td>
+                <td>{{ d.device.device_type.as_str() }}</td>
+                <td>{{ d.services_up }}/{{ d.services_total }}</td>
+                <td class="mono">{% match d.latency_us %}{% when Some with (v) %}{{ v / 1000 }}ms{% when None %}-{% endmatch %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if !recent_alerts.is_empty() %}
+<h2 class="section-title">Recent Alerts</h2>
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Severity</th>
+                <th>Message</th>
+                <th>Time</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in recent_alerts %}
+            <tr>
+                <td><span class="badge {{ a.severity.badge_class() }}">{{ a.severity.as_str() }}</span></td>
+                <td>{{ a.message }}</td>
+                <td class="mono">{{ a.created_at }}</td>
+                <td>
+                    {% if !a.acknowledged %}
+                    <button class="btn btn-sm btn-primary"
+                            hx-post="/api/alerts/{{ a.id }}/ack"
+                            hx-swap="none">Ack</button>
+                    {% else %}
+                    <span class="text-muted">acked</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

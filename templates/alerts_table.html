@@ -1,0 +1,21 @@
+{% if alerts.is_empty() %}
+<tr class="empty-row"><td colspan="6">No alerts</td></tr>
+{% else %}
+{% for a in alerts %}
+<tr{% if !a.alert.acknowledged %} class="alert-active"{% endif %}>
+    <td><span class="badge {{ a.alert.severity.badge_class() }}">{{ a.alert.severity.as_str() }}</span></td>
+    <td>{% match a.device_name %}{% when Some with (n) %}<a href="/ui/devices/{{ a.alert.device_id }}">{{ n }}</a>{% when None %}{{ a.alert.device_id }}{% endmatch %}</td>
+    <td>{{ a.alert.message }}</td>
+    <td class="mono">{{ a.alert.created_at }}</td>
+    <td>{% if a.alert.acknowledged %}<span class="text-muted">acked</span>{% else %}<span class="text-danger">active</span>{% endif %}</td>
+    <td>
+        {% if !a.alert.acknowledged %}
+        <button class="btn btn-sm btn-primary"
+                hx-post="/api/alerts/{{ a.alert.id }}/ack"
+                hx-target="closest tr"
+                hx-swap="outerHTML">Ack</button>
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}
+{% endif %}

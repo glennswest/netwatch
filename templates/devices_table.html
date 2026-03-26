@@ -1,0 +1,22 @@
+{% if devices.is_empty() %}
+<tr class="empty-row"><td colspan="8">No devices discovered yet</td></tr>
+{% else %}
+{% for d in devices %}
+<tr>
+    <td><span class="badge {{ d.status.badge_class() }}">{{ d.status.as_str() }}</span></td>
+    <td><a href="/ui/devices/{{ d.device.id }}">{{ d.device.name }}</a></td>
+    <td class="mono">{{ d.device.ip }}</td>
+    <td>{{ d.device.device_type.as_str() }}</td>
+    <td>{% match d.device.vendor %}{% when Some with (v) %}{{ v }}{% when None %}-{% endmatch %}</td>
+    <td>{{ d.services_up }}/{{ d.services_total }}</td>
+    <td class="mono">{% match d.latency_us %}{% when Some with (v) %}{{ v / 1000 }}ms{% when None %}-{% endmatch %}</td>
+    <td>
+        <button class="btn btn-sm btn-danger"
+                hx-delete="/api/devices/{{ d.device.id }}"
+                hx-target="closest tr"
+                hx-swap="outerHTML"
+                hx-confirm="Delete {{ d.device.name }}?">Del</button>
+    </td>
+</tr>
+{% endfor %}
+{% endif %}

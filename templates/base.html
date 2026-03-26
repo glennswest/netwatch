@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Netwatch{% endblock %}</title>
+    <link rel="stylesheet" href="/ui/static/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">Netwatch</div>
+        <div class="nav-links">
+            <a href="/ui/"{% if active == "dashboard" %} class="active"{% endif %}>Dashboard</a>
+            <a href="/ui/devices"{% if active == "devices" %} class="active"{% endif %}>Devices</a>
+            <a href="/ui/map"{% if active == "map" %} class="active"{% endif %}>Map</a>
+            <a href="/ui/services"{% if active == "services" %} class="active"{% endif %}>Services</a>
+            <a href="/ui/alerts"{% if active == "alerts" %} class="active"{% endif %}>Alerts</a>
+            <a href="/ui/discovery"{% if active == "discovery" %} class="active"{% endif %}>Discovery</a>
+            <a href="/ui/performance"{% if active == "performance" %} class="active"{% endif %}>Performance</a>
+            <a href="/ui/settings"{% if active == "settings" %} class="active"{% endif %}>Settings</a>
+        </div>
+    </nav>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <div id="toast-container"></div>
+    <script src="/ui/static/app.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

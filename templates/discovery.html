@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Discovery — Netwatch{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Network Discovery</h1>
+</div>
+
+<div class="form-section">
+    <h3>Add Subnet</h3>
+    <form hx-post="/api/subnets" hx-target="#subnet-table-body" hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful) { this.reset(); location.reload(); }">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" name="name" placeholder="Main LAN" required>
+            </div>
+            <div class="form-group">
+                <label>CIDR</label>
+                <input type="text" name="cidr" placeholder="192.168.1.0/24" required>
+            </div>
+            <div class="form-group">
+                <label>SNMP Community</label>
+                <input type="text" name="snmp_community" placeholder="public" value="public">
+            </div>
+            <div class="form-group" style="flex: 0;">
+                <label>&nbsp;</label>
+                <button type="submit" class="btn btn-primary">Add</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>CIDR</th>
+                <th>Community</th>
+                <th>Enabled</th>
+                <th>Last Scan</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="subnet-table-body">
+            {% if subnets.is_empty() %}
+            <tr class="empty-row"><td colspan="6">No subnets configured — add one above to start discovery</td></tr>
+            {% else %}
+            {% for s in subnets %}
+            <tr>
+                <td>{{ s.name }}</td>
+                <td class="mono">{{ s.cidr }}</td>
+                <td class="mono">{{ s.snmp_community }}</td>
+                <td>{% if s.scan_enabled %}<span class="badge badge-success">yes</span>{% else %}<span class="badge badge-info">no</span>{% endif %}</td>
+                <td class="mono">{% match s.last_scan %}{% when Some with (t) %}{{ t }}{% when None %}never{% endmatch %}</td>
+                <td>
+                    <button class="btn btn-sm btn-primary"
+                            hx-post="/api/discovery/scan"
+                            hx-vals='{"subnet_id":"{{ s.id }}"}'
+                            hx-swap="none">Scan Now</button>
+                    <button class="btn btn-sm btn-danger"
+                            hx-delete="/api/subnets/{{ s.id }}"
+                            hx-target="closest tr"
+                            hx-swap="outerHTML"
+                            hx-confirm="Delete subnet {{ s.cidr }}?">Del</button>
+                </td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

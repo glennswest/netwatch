@@ -1,0 +1,51 @@
+# Netwatch configuration
+
+[server]
+listen = "0.0.0.0:8080"
+data_dir = "/var/lib/netwatch"
+
+[discovery]
+interval_secs = 300          # Scan every 5 minutes
+snmp_community = "public"
+snmp_timeout_ms = 2000
+auto_add_services = true
+scan_ports = [22, 23, 53, 80, 161, 443, 8080, 8291, 8728, 8729]
+
+[monitoring]
+default_interval_secs = 60
+default_timeout_ms = 5000
+concurrency = 50
+
+[alerting]
+cooldown_secs = 300
+consecutive_failures = 3
+
+# Uncomment to enable email alerts:
+# [alerting.email]
+# smtp_host = "smtp.example.com"
+# smtp_port = 587
+# from = "netwatch@example.com"
+# to = ["admin@example.com"]
+# username = "netwatch"
+# password = "secret"
+# tls = true
+
+# Uncomment to enable webhook alerts:
+# [alerting.webhook]
+# url = "https://hooks.slack.com/services/..."
+
+[retention]
+probe_days = 30
+metric_days = 90
+alert_days = 180
+
+# Subnets to auto-discover on startup:
+# [[subnets]]
+# name = "Main LAN"
+# cidr = "192.168.1.0/24"
+# snmp_community = "public"
+
+# [[subnets]]
+# name = "Server VLAN"
+# cidr = "10.0.10.0/24"
+# snmp_community = "private"

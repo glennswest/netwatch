@@ -1,0 +1,457 @@
+use serde::{Deserialize, Serialize};
+use native_db::*;
+use native_model;
+use native_model::native_model;
+
+// ── Device types ──
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DeviceType {
+    Router,
+    Switch,
+    Server,
+    Firewall,
+    Ap,
+    Printer,
+    Camera,
+    Phone,
+    Other,
+}
+
+impl DeviceType {
+    pub fn parse(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "router" => Self::Router,
+            "switch" => Self::Switch,
+            "server" => Self::Server,
+            "firewall" => Self::Firewall,
+            "ap" | "wireless" => Self::Ap,
+            "printer" => Self::Printer,
+            "camera" => Self::Camera,
+            "phone" => Self::Phone,
+            _ => Self::Other,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Router => "router",
+            Self::Switch => "switch",
+            Self::Server => "server",
+            Self::Firewall => "firewall",
+            Self::Ap => "ap",
+            Self::Printer => "printer",
+            Self::Camera => "camera",
+            Self::Phone => "phone",
+            Self::Other => "other",
+        }
+    }
+
+    pub fn icon_letter(&self) -> &'static str {
+        match self {
+            Self::Router => "R",
+            Self::Switch => "S",
+            Self::Server => "V",
+            Self::Firewall => "F",
+            Self::Ap => "W",
+            Self::Printer => "P",
+            Self::Camera => "C",
+            Self::Phone => "T",
+            Self::Other => "?",
+        }
+    }
+
+    pub fn icon_color(&self) -> &'static str {
+        match self {
+            Self::Router => "#5b8af5",
+            Self::Switch => "#4caf7d",
+            Self::Server => "#9b6af5",
+            Self::Firewall => "#e55b5b",
+            Self::Ap => "#5bc0de",
+            Self::Printer => "#6b7084",
+            Self::Camera => "#e5a54b",
+            Self::Phone => "#5baae5",
+            Self::Other => "#6b7084",
+        }
+    }
+}
+
+impl std::fmt::Display for DeviceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+// ── Probe types ──
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ProbeType {
+    Icmp,
+    Tcp,
+    Http,
+    Https,
+    Dns,
+    Snmp,
+}
+
+impl ProbeType {
+    pub fn parse(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "icmp" | "ping" => Self::Icmp,
+            "tcp" => Self::Tcp,
+            "http" => Self::Http,
+            "https" => Self::Https,
+            "dns" => Self::Dns,
+            "snmp" => Self::Snmp,
+            _ => Self::Tcp,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Icmp => "icmp",
+            Self::Tcp => "tcp",
+            Self::Http => "http",
+            Self::Https => "https",
+            Self::Dns => "dns",
+            Self::Snmp => "snmp",
+        }
+    }
+}
+
+impl std::fmt::Display for ProbeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+// ── Probe status ──
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ProbeStatus {
+    Up,
+    Down,
+    Unknown,
+    Degraded,
+}
+
+impl ProbeStatus {
+    pub fn parse(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "up" => Self::Up,
+            "down" => Self::Down,
+            "degraded" => Self::Degraded,
+            _ => Self::Unknown,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Unknown => "unknown",
+            Self::Degraded => "degraded",
+        }
+    }
+
+    pub fn badge_class(&self) -> &'static str {
+        match self {
+            Self::Up => "badge-success",
+            Self::Down => "badge-danger",
+            Self::Unknown => "badge-info",
+            Self::Degraded => "badge-warning",
+        }
+    }
+}
+
+impl std::fmt::Display for ProbeStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+// ── Severity ──
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum Severity {
+    Info,
+    Warning,
+    Critical,
+}
+
+impl Severity {
+    pub fn parse(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "warning" | "warn" => Self::Warning,
+            "critical" | "crit" => Self::Critical,
+            _ => Self::Info,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Info => "info",
+            Self::Warning => "warning",
+            Self::Critical => "critical",
+        }
+    }
+
+    pub fn badge_class(&self) -> &'static str {
+        match self {
+            Self::Info => "badge-info",
+            Self::Warning => "badge-warning",
+            Self::Critical => "badge-danger",
+        }
+    }
+}
+
+impl std::fmt::Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+// ── Database models ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 1, version = 1)]
+#[native_db]
+pub struct Device {
+    #[primary_key]
+    pub id: String,
+    #[secondary_key(unique)]
+    pub ip: String,
+    pub name: String,
+    pub mac: Option<String>,
+    pub vendor: Option<String>,
+    pub device_type: DeviceType,
+    pub snmp_community: Option<String>,
+    pub snmp_version: i32,
+    pub sys_descr: Option<String>,
+    pub sys_object_id: Option<String>,
+    pub location: Option<String>,
+    pub notes: Option<String>,
+    pub enabled: bool,
+    pub last_seen: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 2, version = 1)]
+#[native_db]
+pub struct NetInterface {
+    #[primary_key]
+    pub id: String,
+    #[secondary_key]
+    pub device_id: String,
+    pub name: String,
+    pub if_index: Option<i32>,
+    pub ip: Option<String>,
+    pub mac: Option<String>,
+    pub speed_mbps: Option<i64>,
+    pub status: String,
+    pub if_type: Option<String>,
+    pub in_octets: Option<u64>,
+    pub out_octets: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 3, version = 1)]
+#[native_db]
+pub struct Link {
+    #[primary_key]
+    pub id: String,
+    #[secondary_key]
+    pub source_device_id: String,
+    #[secondary_key]
+    pub target_device_id: String,
+    pub source_if_id: Option<String>,
+    pub target_if_id: Option<String>,
+    pub link_type: String,
+    pub bandwidth_mbps: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 4, version = 1)]
+#[native_db]
+pub struct Service {
+    #[primary_key]
+    pub id: String,
+    #[secondary_key]
+    pub device_id: String,
+    pub name: String,
+    pub probe_type: ProbeType,
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub url: Option<String>,
+    pub interval_secs: u32,
+    pub timeout_ms: u32,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 5, version = 1)]
+#[native_db]
+pub struct ProbeResult {
+    #[primary_key]
+    pub id: String,
+    #[secondary_key]
+    pub service_id: String,
+    pub status: ProbeStatus,
+    pub latency_us: Option<i64>,
+    pub error: Option<String>,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 6, version = 1)]
+#[native_db]
+pub struct Alert {
+    #[primary_key]
+    pub id: String,
+    #[secondary_key]
+    pub device_id: String,
+    pub service_id: Option<String>,
+    pub severity: Severity,
+    pub message: String,
+    pub acknowledged: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 7, version = 1)]
+#[native_db]
+pub struct Subnet {
+    #[primary_key]
+    pub id: String,
+    pub name: String,
+    #[secondary_key(unique)]
+    pub cidr: String,
+    pub snmp_community: String,
+    pub scan_enabled: bool,
+    pub last_scan: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 8, version = 1)]
+#[native_db]
+pub struct MapPosition {
+    #[primary_key]
+    pub device_id: String,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 9, version = 1)]
+#[native_db]
+pub struct Metric {
+    #[primary_key]
+    pub id: String,
+    #[secondary_key]
+    pub device_id: String,
+    pub metric_name: String,
+    pub value: f64,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[native_model(id = 10, version = 1)]
+#[native_db]
+pub struct AlertRule {
+    #[primary_key]
+    pub id: String,
+    pub name: String,
+    pub device_match: Option<String>,
+    pub service_match: Option<String>,
+    pub condition: String,
+    pub threshold: f64,
+    pub severity: Severity,
+    pub channels: Vec<String>,
+    pub cooldown_secs: u32,
+    pub enabled: bool,
+}
+
+// ── View models (not stored, used for rendering) ──
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DeviceStatus {
+    pub device: Device,
+    pub status: ProbeStatus,
+    pub services_up: usize,
+    pub services_down: usize,
+    pub services_total: usize,
+    pub latency_us: Option<i64>,
+    pub position: Option<MapPosition>,
+}
+
+// ── Request types ──
+
+#[derive(Debug, Deserialize)]
+pub struct CreateDevice {
+    pub name: String,
+    pub ip: String,
+    pub mac: Option<String>,
+    pub device_type: Option<String>,
+    pub snmp_community: Option<String>,
+    pub location: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateDevice {
+    pub name: Option<String>,
+    pub ip: Option<String>,
+    pub mac: Option<String>,
+    pub device_type: Option<String>,
+    pub snmp_community: Option<String>,
+    pub location: Option<String>,
+    pub notes: Option<String>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSubnet {
+    pub name: String,
+    pub cidr: String,
+    pub snmp_community: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateService {
+    pub device_id: String,
+    pub name: String,
+    pub probe_type: String,
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub url: Option<String>,
+    pub interval_secs: Option<u32>,
+    pub timeout_ms: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateLink {
+    pub source_device_id: String,
+    pub source_if_id: Option<String>,
+    pub target_device_id: String,
+    pub target_if_id: Option<String>,
+    pub link_type: Option<String>,
+    pub bandwidth_mbps: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PositionUpdate {
+    pub device_id: String,
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MetricQuery {
+    pub device_id: Option<String>,
+    pub metric_name: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub limit: Option<usize>,
+}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Settings — Netwatch{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Settings</h1>
+</div>
+
+<div class="card-grid">
+    <div class="card">
+        <div class="card-label">Email Notifications</div>
+        <div class="card-value" style="font-size: 1.1rem;">{% if has_email %}<span class="text-success">Configured</span>{% else %}<span class="text-muted">Not configured</span>{% endif %}</div>
+        <div class="card-sub">Set via netwatch.toml [alerting.email]</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Webhook Notifications</div>
+        <div class="card-value" style="font-size: 1.1rem;">{% if has_webhook %}<span class="text-success">Configured</span>{% else %}<span class="text-muted">Not configured</span>{% endif %}</div>
+        <div class="card-sub">Set via netwatch.toml [alerting.webhook]</div>
+    </div>
+</div>
+
+<h2 class="section-title">Alert Rules</h2>
+
+<div class="form-section">
+    <h3>Add Alert Rule</h3>
+    <form hx-post="/api/alert-rules" hx-swap="none"
+          hx-on::after-request="if(event.detail.successful) location.reload()">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Name</label>
+                <input type="text" name="name" placeholder="High latency" required>
+            </div>
+            <div class="form-group">
+                <label>Condition</label>
+                <select name="condition">
+                    <option value="latency_above">Latency Above</option>
+                    <option value="consecutive_down">Consecutive Down</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Threshold</label>
+                <input type="number" name="threshold" placeholder="100" required>
+            </div>
+            <div class="form-group">
+                <label>Severity</label>
+                <select name="severity">
+                    <option value="info">Info</option>
+                    <option value="warning" selected>Warning</option>
+                    <option value="critical">Critical</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex: 0;">
+                <label>&nbsp;</label>
+                <button type="submit" class="btn btn-primary">Add</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Condition</th>
+                <th>Threshold</th>
+                <th>Severity</th>
+                <th>Enabled</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if rules.is_empty() %}
+            <tr class="empty-row"><td colspan="6">No custom alert rules — default rules (3 consecutive failures = critical) are always active</td></tr>
+            {% else %}
+            {% for r in rules %}
+            <tr>
+                <td>{{ r.name }}</td>
+                <td>{{ r.condition }}</td>
+                <td class="mono">{{ r.threshold }}</td>
+                <td><span class="badge {{ r.severity.badge_class() }}">{{ r.severity.as_str() }}</span></td>
+                <td>{% if r.enabled %}<span class="badge badge-success">yes</span>{% else %}<span class="badge badge-info">no</span>{% endif %}</td>
+                <td>
+                    <button class="btn btn-sm btn-danger"
+                            hx-delete="/api/alert-rules/{{ r.id }}"
+                            hx-target="closest tr"
+                            hx-swap="outerHTML">Del</button>
+                </td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

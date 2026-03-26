@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Services — Netwatch{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Services</h1>
+    <span class="htmx-indicator" id="svc-loading">refreshing...</span>
+</div>
+
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Service</th>
+                <th>Device</th>
+                <th>IP</th>
+                <th>Type</th>
+                <th>Port</th>
+                <th>Interval</th>
+                <th>Latency</th>
+            </tr>
+        </thead>
+        <tbody id="services-table-body" hx-get="/ui/partials/services-table" hx-trigger="every 10s" hx-indicator="#svc-loading">
+            {% include "services_table.html" %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

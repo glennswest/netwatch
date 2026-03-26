@@ -1,0 +1,16 @@
+{% if services.is_empty() %}
+<tr class="empty-row"><td colspan="8">No services configured</td></tr>
+{% else %}
+{% for s in services %}
+<tr>
+    <td><span class="badge {{ s.status.badge_class() }}">{{ s.status.as_str() }}</span></td>
+    <td>{{ s.service.name }}</td>
+    <td><a href="/ui/devices/{{ s.service.device_id }}">{{ s.device_name }}</a></td>
+    <td class="mono">{{ s.device_ip }}</td>
+    <td class="mono">{{ s.service.probe_type.as_str() }}</td>
+    <td class="mono">{% match s.service.port %}{% when Some with (p) %}{{ p }}{% when None %}-{% endmatch %}</td>
+    <td class="mono">{{ s.service.interval_secs }}s</td>
+    <td class="mono">{% match s.latency_us %}{% when Some with (v) %}{{ v / 1000 }}ms{% when None %}-{% endmatch %}</td>
+</tr>
+{% endfor %}
+{% endif %}

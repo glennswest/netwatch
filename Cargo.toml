@@ -1,0 +1,43 @@
+[package]
+name = "netwatch"
+version = "0.1.0"
+edition = "2021"
+description = "Network monitoring and topology mapping — replaces MikroTik Dude"
+license = "MIT"
+
+[[bin]]
+name = "netwatch"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+askama = "0.12"
+tokio = { version = "1", features = ["full"] }
+native_db = "0.8"
+native_model = "0.4"
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
+rust-embed = "8"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
+socket2 = "0.5"
+ipnetwork = "0.20"
+dns-lookup = "2"
+rand = "0.8"
+clap = { version = "4", features = ["derive"] }
+mime_guess = "2"
+tower = "0.5"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
