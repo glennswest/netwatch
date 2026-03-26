@@ -3,7 +3,6 @@
 use crate::config::Config;
 use crate::db::Db;
 use crate::models::*;
-use anyhow::Result;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
@@ -120,17 +119,13 @@ async fn execute_probe(svc: &Service) -> ProbeOutput {
         ProbeType::Icmp => probe_icmp(host, timeout).await,
         ProbeType::Tcp => probe_tcp(host, svc.port.unwrap_or(80), timeout).await,
         ProbeType::Http => {
-            let url = svc
-                .url
-                .as_deref()
-                .unwrap_or(&format!("http://{}:{}", host, svc.port.unwrap_or(80)));
+            let default_url = format!("http://{}:{}", host, svc.port.unwrap_or(80));
+            let url = svc.url.as_deref().unwrap_or(&default_url);
             probe_http(url, timeout).await
         }
         ProbeType::Https => {
-            let url = svc
-                .url
-                .as_deref()
-                .unwrap_or(&format!("https://{}:{}", host, svc.port.unwrap_or(443)));
+            let default_url = format!("https://{}:{}", host, svc.port.unwrap_or(443));
+            let url = svc.url.as_deref().unwrap_or(&default_url);
             probe_http(url, timeout).await
         }
         ProbeType::Dns => probe_dns(host, timeout).await,

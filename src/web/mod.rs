@@ -6,10 +6,9 @@ use crate::db::Db;
 use crate::config::Config;
 use axum::{
     Router,
-    extract::State,
     response::{Html, IntoResponse, Response},
     http::{header, StatusCode},
-    routing::{get, post, put, delete},
+    routing::{get, post, delete},
 };
 use rust_embed::Embed;
 use std::sync::Arc;

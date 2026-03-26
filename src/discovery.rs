@@ -8,7 +8,7 @@ use anyhow::Result;
 use ipnetwork::IpNetwork;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::broadcast;
 
 /// Background discovery loop.
@@ -406,72 +406,65 @@ pub async fn ping_host(ip: &str, timeout_ms: u64) -> bool {
 }
 
 pub fn ping_host_sync(ip: &str, timeout_ms: u64) -> bool {
-    use socket2::{Domain, Protocol, Socket, Type};
+    use socket2::{Domain, Protocol, Socket, Type, SockAddr};
+    use std::mem::MaybeUninit;
 
     let addr: std::net::IpAddr = match ip.parse() {
         Ok(a) => a,
         Err(_) => return false,
     };
 
-    // Try raw ICMP socket first, fall back to UDP probe
-    let sock = match Socket::new(Domain::IPV4, Type::RAW, Some(Protocol::ICMPV4)) {
+    // Try DGRAM ICMP first (unprivileged), then RAW, then TCP fallback
+    let raw_type = Type::from(libc::SOCK_RAW);
+    let dgram_type = Type::DGRAM;
+    let icmp_proto = Protocol::ICMPV4;
+
+    let sock = match Socket::new(Domain::IPV4, dgram_type, Some(icmp_proto)) {
         Ok(s) => s,
-        Err(_) => {
-            // Fallback: try DGRAM ICMP (unprivileged, Linux >= 3.0)
-            match Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::ICMPV4)) {
-                Ok(s) => s,
-                Err(_) => {
-                    // Final fallback: TCP connect to common port
-                    return tcp_probe_sync(ip, 80, timeout_ms)
-                        || tcp_probe_sync(ip, 443, timeout_ms)
-                        || tcp_probe_sync(ip, 22, timeout_ms);
-                }
+        Err(_) => match Socket::new(Domain::IPV4, raw_type, Some(icmp_proto)) {
+            Ok(s) => s,
+            Err(_) => {
+                return tcp_probe_sync(ip, 80, timeout_ms)
+                    || tcp_probe_sync(ip, 443, timeout_ms)
+                    || tcp_probe_sync(ip, 22, timeout_ms);
             }
-        }
+        },
     };
 
-    sock.set_read_timeout(Some(Duration::from_millis(timeout_ms)))
-        .ok();
-    sock.set_write_timeout(Some(Duration::from_millis(timeout_ms)))
-        .ok();
+    sock.set_read_timeout(Some(Duration::from_millis(timeout_ms))).ok();
+    sock.set_write_timeout(Some(Duration::from_millis(timeout_ms))).ok();
 
-    let dest = SocketAddr::new(addr, 0);
+    let dest: SockAddr = SocketAddr::new(addr, 0).into();
 
     // Build ICMP echo request
     let id = (std::process::id() & 0xFFFF) as u16;
     let seq = 1u16;
     let mut packet = vec![
-        8,    // type: echo request
-        0,    // code
-        0, 0, // checksum (placeholder)
-        (id >> 8) as u8,
-        (id & 0xFF) as u8,
-        (seq >> 8) as u8,
-        (seq & 0xFF) as u8,
+        8, 0, 0, 0, // type=echo, code=0, checksum placeholder
+        (id >> 8) as u8, (id & 0xFF) as u8,
+        (seq >> 8) as u8, (seq & 0xFF) as u8,
     ];
-    // Payload
     packet.extend_from_slice(b"netwatch\x00");
 
-    // Calculate checksum
     let cksum = icmp_checksum(&packet);
     packet[2] = (cksum >> 8) as u8;
     packet[3] = (cksum & 0xFF) as u8;
 
-    if sock.send_to(&packet, &dest.into()).is_err() {
+    if sock.send_to(&packet, &dest).is_err() {
         return false;
     }
 
-    let mut buf = [0u8; 256];
+    let mut buf = [MaybeUninit::<u8>::uninit(); 256];
     match sock.recv(&mut buf) {
         Ok(n) if n >= 8 => {
+            // SAFETY: recv filled `n` bytes
+            let data: Vec<u8> = buf[..n].iter().map(|b| unsafe { b.assume_init() }).collect();
             // Check for echo reply (type 0)
-            // Raw socket includes IP header (20 bytes), DGRAM does not
-            let offset = if buf[0] >> 4 == 4 { 20 } else { 0 };
-            if offset < n && buf[offset] == 0 {
+            let offset = if data[0] >> 4 == 4 { 20 } else { 0 };
+            if offset < n && data[offset] == 0 {
                 return true;
             }
-            // Some systems return type 0 at offset 0
-            buf[0] == 0
+            data[0] == 0
         }
         _ => false,
     }

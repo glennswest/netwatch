@@ -60,7 +60,7 @@
                 <td>{{ s.service.name }}</td>
                 <td class="mono">{{ s.service.probe_type.as_str() }}</td>
                 <td class="mono">{% match s.service.port %}{% when Some with (p) %}{{ p }}{% when None %}-{% endmatch %}</td>
-                <td class="mono">{% match s.latency_us %}{% when Some with (v) %}{{ v / 1000 }}ms{% when None %}-{% endmatch %}</td>
+                <td class="mono">{{ s.latency_ms() }}</td>
                 <td class="text-muted">{% match s.last_error %}{% when Some with (e) %}{{ e }}{% when None %}{% endmatch %}</td>
             </tr>
             {% endfor %}
@@ -85,10 +85,10 @@
         <tbody>
             {% for iface in interfaces %}
             <tr>
-                <td><span class="badge {% if iface.status == "up" %}badge-success{% elif iface.status == "down" %}badge-danger{% else %}badge-info{% endif %}">{{ iface.status }}</span></td>
+                <td><span class="badge {% if iface.status == "up" %}badge-success{% else if iface.status == "down" %}badge-danger{% else %}badge-info{% endif %}">{{ iface.status }}</span></td>
                 <td>{{ iface.name }}</td>
                 <td class="mono">{% match iface.if_index %}{% when Some with (i) %}{{ i }}{% when None %}-{% endmatch %}</td>
-                <td class="mono">{% match iface.speed_mbps %}{% when Some with (s) %}{% if s >= 1000 %}{{ s / 1000 }}G{% else %}{{ s }}M{% endif %}{% when None %}-{% endmatch %}</td>
+                <td class="mono">{{ iface.speed_display() }}</td>
                 <td class="mono">{% match iface.mac %}{% when Some with (m) %}{{ m }}{% when None %}-{% endmatch %}</td>
             </tr>
             {% endfor %}

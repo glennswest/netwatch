@@ -10,7 +10,7 @@
     <td class="mono">{{ s.service.probe_type.as_str() }}</td>
     <td class="mono">{% match s.service.port %}{% when Some with (p) %}{{ p }}{% when None %}-{% endmatch %}</td>
     <td class="mono">{{ s.service.interval_secs }}s</td>
-    <td class="mono">{% match s.latency_us %}{% when Some with (v) %}{{ v / 1000 }}ms{% when None %}-{% endmatch %}</td>
+    <td class="mono">{{ s.latency_ms() }}</td>
 </tr>
 {% endfor %}
 {% endif %}

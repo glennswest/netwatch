@@ -56,7 +56,7 @@
                 <td class="mono">{{ d.device.ip }}</td>
                 <td>{{ d.device.device_type.as_str() }}</td>
                 <td>{{ d.services_up }}/{{ d.services_total }}</td>
-                <td class="mono">{% match d.latency_us %}{% when Some with (v) %}{{ v / 1000 }}ms{% when None %}-{% endmatch %}</td>
+                <td class="mono">{{ d.latency_ms() }}</td>
             </tr>
             {% endfor %}
         </tbody>

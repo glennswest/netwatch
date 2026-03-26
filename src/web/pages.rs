@@ -4,7 +4,7 @@ use super::{AppState, HtmlTemplate};
 use crate::models::*;
 use askama::Template;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     response::{IntoResponse, Redirect},
 };
 
@@ -109,6 +109,15 @@ pub struct ServiceWithStatus {
     pub status: ProbeStatus,
     pub latency_us: Option<i64>,
     pub last_error: Option<String>,
+}
+
+impl ServiceWithStatus {
+    pub fn latency_ms(&self) -> String {
+        match self.latency_us {
+            Some(v) => format!("{}ms", v / 1000),
+            None => "-".into(),
+        }
+    }
 }
 
 pub async fn device_detail(
@@ -251,6 +260,15 @@ pub struct ServiceRow {
     pub device_ip: String,
     pub status: ProbeStatus,
     pub latency_us: Option<i64>,
+}
+
+impl ServiceRow {
+    pub fn latency_ms(&self) -> String {
+        match self.latency_us {
+            Some(v) => format!("{}ms", v / 1000),
+            None => "-".into(),
+        }
+    }
 }
 
 pub async fn services(State(state): State<AppState>) -> impl IntoResponse {

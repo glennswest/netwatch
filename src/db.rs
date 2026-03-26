@@ -1,119 +1,140 @@
 use crate::models::*;
 use anyhow::Result;
-use native_db::*;
+use redb::{Database, ReadableTable, TableDefinition};
 use std::path::Path;
 use std::sync::Arc;
 
-/// Wrapper around native_db providing all storage operations.
+// Table definitions: key = id (string), value = JSON bytes
+const DEVICES: TableDefinition<&str, &[u8]> = TableDefinition::new("devices");
+const INTERFACES: TableDefinition<&str, &[u8]> = TableDefinition::new("interfaces");
+const LINKS: TableDefinition<&str, &[u8]> = TableDefinition::new("links");
+const SERVICES: TableDefinition<&str, &[u8]> = TableDefinition::new("services");
+const PROBES: TableDefinition<&str, &[u8]> = TableDefinition::new("probes");
+const ALERTS: TableDefinition<&str, &[u8]> = TableDefinition::new("alerts");
+const SUBNETS: TableDefinition<&str, &[u8]> = TableDefinition::new("subnets");
+const POSITIONS: TableDefinition<&str, &[u8]> = TableDefinition::new("positions");
+const METRICS: TableDefinition<&str, &[u8]> = TableDefinition::new("metrics");
+const ALERT_RULES: TableDefinition<&str, &[u8]> = TableDefinition::new("alert_rules");
+
 pub struct Db {
-    inner: Database<'static>,
-}
-
-// Safety: we ensure Models lives as long as the database via Box::leak
-unsafe impl Send for Db {}
-unsafe impl Sync for Db {}
-
-fn define_models() -> &'static Models {
-    let mut models = Models::new();
-    models.define::<Device>().expect("define Device");
-    models.define::<NetInterface>().expect("define NetInterface");
-    models.define::<Link>().expect("define Link");
-    models.define::<Service>().expect("define Service");
-    models.define::<ProbeResult>().expect("define ProbeResult");
-    models.define::<Alert>().expect("define Alert");
-    models.define::<Subnet>().expect("define Subnet");
-    models.define::<MapPosition>().expect("define MapPosition");
-    models.define::<Metric>().expect("define Metric");
-    models.define::<AlertRule>().expect("define AlertRule");
-    Box::leak(Box::new(models))
+    inner: Database,
 }
 
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
-        let models = define_models();
-        let inner = Builder::new().create(models, path)?;
-        Ok(Self { inner })
+        let db = Database::create(path)?;
+        // Ensure all tables exist
+        let write = db.begin_write()?;
+        write.open_table(DEVICES)?;
+        write.open_table(INTERFACES)?;
+        write.open_table(LINKS)?;
+        write.open_table(SERVICES)?;
+        write.open_table(PROBES)?;
+        write.open_table(ALERTS)?;
+        write.open_table(SUBNETS)?;
+        write.open_table(POSITIONS)?;
+        write.open_table(METRICS)?;
+        write.open_table(ALERT_RULES)?;
+        write.commit()?;
+        Ok(Self { inner: db })
+    }
+
+    // ── Generic helpers ──
+
+    fn get_all<T: serde::de::DeserializeOwned>(&self, table: TableDefinition<&str, &[u8]>) -> Result<Vec<T>> {
+        let read = self.inner.begin_read()?;
+        let tbl = read.open_table(table)?;
+        let mut items = Vec::new();
+        for entry in tbl.iter()? {
+            let (_, val) = entry?;
+            items.push(serde_json::from_slice(val.value())?);
+        }
+        Ok(items)
+    }
+
+    fn get_one<T: serde::de::DeserializeOwned>(&self, table: TableDefinition<&str, &[u8]>, id: &str) -> Result<Option<T>> {
+        let read = self.inner.begin_read()?;
+        let tbl = read.open_table(table)?;
+        match tbl.get(id)? {
+            Some(val) => Ok(Some(serde_json::from_slice(val.value())?)),
+            None => Ok(None),
+        }
+    }
+
+    fn put<T: serde::Serialize>(&self, table: TableDefinition<&str, &[u8]>, id: &str, item: &T) -> Result<()> {
+        let json = serde_json::to_vec(item)?;
+        let write = self.inner.begin_write()?;
+        {
+            let mut tbl = write.open_table(table)?;
+            tbl.insert(id, json.as_slice())?;
+        }
+        write.commit()?;
+        Ok(())
+    }
+
+    fn del(&self, table: TableDefinition<&str, &[u8]>, id: &str) -> Result<()> {
+        let write = self.inner.begin_write()?;
+        {
+            let mut tbl = write.open_table(table)?;
+            tbl.remove(id)?;
+        }
+        write.commit()?;
+        Ok(())
     }
 
     // ── Devices ──
 
     pub fn list_devices(&self) -> Result<Vec<Device>> {
-        let r = self.inner.r_transaction()?;
-        let items: Vec<Device> = r.scan().primary()?.all()?.try_collect()?;
-        Ok(items)
+        self.get_all(DEVICES)
     }
 
     pub fn get_device(&self, id: &str) -> Result<Option<Device>> {
-        let r = self.inner.r_transaction()?;
-        let item = r.get().primary(id.to_string())?;
-        Ok(item)
+        self.get_one(DEVICES, id)
     }
 
     pub fn get_device_by_ip(&self, ip: &str) -> Result<Option<Device>> {
-        let r = self.inner.r_transaction()?;
-        let item = r.get().secondary(DeviceKey::ip, ip.to_string())?;
-        Ok(item)
+        let devices = self.list_devices()?;
+        Ok(devices.into_iter().find(|d| d.ip == ip))
     }
 
     pub fn insert_device(&self, device: Device) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        rw.insert(device)?;
-        rw.commit()?;
-        Ok(())
+        self.put(DEVICES, &device.id, &device)
     }
 
-    pub fn update_device(&self, old: Device, new: Device) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        rw.update(old, new)?;
-        rw.commit()?;
-        Ok(())
+    pub fn update_device(&self, _old: Device, new: Device) -> Result<()> {
+        self.put(DEVICES, &new.id, &new)
     }
 
     pub fn delete_device(&self, id: &str) -> Result<()> {
-        if let Some(device) = self.get_device(id)? {
-            let rw = self.inner.rw_transaction()?;
-            rw.remove(device)?;
-            rw.commit()?;
-        }
-        Ok(())
+        self.del(DEVICES, id)
     }
 
     // ── Interfaces ──
 
     pub fn list_interfaces_for_device(&self, device_id: &str) -> Result<Vec<NetInterface>> {
-        let r = self.inner.r_transaction()?;
-        let all: Vec<NetInterface> = r.scan().primary()?.all()?.try_collect()?;
+        let all: Vec<NetInterface> = self.get_all(INTERFACES)?;
         Ok(all.into_iter().filter(|i| i.device_id == device_id).collect())
     }
 
-    pub fn upsert_interface(&self, iface: NetInterface) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        if let Ok(Some(old)) = {
-            let r2 = self.inner.r_transaction()?;
-            let v: Result<Option<NetInterface>, _> = r2.get().primary(iface.id.clone());
-            v
-        } {
-            rw.update(old, iface)?;
-        } else {
-            rw.insert(iface)?;
-        }
-        rw.commit()?;
-        Ok(())
+    pub fn get_interface(&self, id: &str) -> Result<Option<NetInterface>> {
+        self.get_one(INTERFACES, id)
     }
 
-    pub fn get_interface(&self, id: &str) -> Result<Option<NetInterface>> {
-        let r = self.inner.r_transaction()?;
-        Ok(r.get().primary(id.to_string())?)
+    pub fn upsert_interface(&self, iface: NetInterface) -> Result<()> {
+        self.put(INTERFACES, &iface.id, &iface)
     }
 
     pub fn delete_interfaces_for_device(&self, device_id: &str) -> Result<()> {
         let ifaces = self.list_interfaces_for_device(device_id)?;
         if !ifaces.is_empty() {
-            let rw = self.inner.rw_transaction()?;
-            for iface in ifaces {
-                rw.remove(iface)?;
+            let write = self.inner.begin_write()?;
+            {
+                let mut tbl = write.open_table(INTERFACES)?;
+                for iface in &ifaces {
+                    tbl.remove(iface.id.as_str())?;
+                }
             }
-            rw.commit()?;
+            write.commit()?;
         }
         Ok(())
     }
@@ -121,43 +142,32 @@ impl Db {
     // ── Links ──
 
     pub fn list_links(&self) -> Result<Vec<Link>> {
-        let r = self.inner.r_transaction()?;
-        let items: Vec<Link> = r.scan().primary()?.all()?.try_collect()?;
-        Ok(items)
+        self.get_all(LINKS)
     }
 
     pub fn insert_link(&self, link: Link) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        rw.insert(link)?;
-        rw.commit()?;
-        Ok(())
+        self.put(LINKS, &link.id, &link)
     }
 
     pub fn delete_link(&self, id: &str) -> Result<()> {
-        if let Some(link) = {
-            let r = self.inner.r_transaction()?;
-            let v: Option<Link> = r.get().primary(id.to_string())?;
-            v
-        } {
-            let rw = self.inner.rw_transaction()?;
-            rw.remove(link)?;
-            rw.commit()?;
-        }
-        Ok(())
+        self.del(LINKS, id)
     }
 
     pub fn delete_links_for_device(&self, device_id: &str) -> Result<()> {
         let links = self.list_links()?;
-        let to_remove: Vec<Link> = links
-            .into_iter()
+        let to_remove: Vec<&Link> = links
+            .iter()
             .filter(|l| l.source_device_id == device_id || l.target_device_id == device_id)
             .collect();
         if !to_remove.is_empty() {
-            let rw = self.inner.rw_transaction()?;
-            for link in to_remove {
-                rw.remove(link)?;
+            let write = self.inner.begin_write()?;
+            {
+                let mut tbl = write.open_table(LINKS)?;
+                for link in to_remove {
+                    tbl.remove(link.id.as_str())?;
+                }
             }
-            rw.commit()?;
+            write.commit()?;
         }
         Ok(())
     }
@@ -165,9 +175,7 @@ impl Db {
     // ── Services ──
 
     pub fn list_services(&self) -> Result<Vec<Service>> {
-        let r = self.inner.r_transaction()?;
-        let items: Vec<Service> = r.scan().primary()?.all()?.try_collect()?;
-        Ok(items)
+        self.get_all(SERVICES)
     }
 
     pub fn list_services_for_device(&self, device_id: &str) -> Result<Vec<Service>> {
@@ -176,34 +184,28 @@ impl Db {
     }
 
     pub fn get_service(&self, id: &str) -> Result<Option<Service>> {
-        let r = self.inner.r_transaction()?;
-        Ok(r.get().primary(id.to_string())?)
+        self.get_one(SERVICES, id)
     }
 
     pub fn insert_service(&self, service: Service) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        rw.insert(service)?;
-        rw.commit()?;
-        Ok(())
+        self.put(SERVICES, &service.id, &service)
     }
 
     pub fn delete_service(&self, id: &str) -> Result<()> {
-        if let Some(svc) = self.get_service(id)? {
-            let rw = self.inner.rw_transaction()?;
-            rw.remove(svc)?;
-            rw.commit()?;
-        }
-        Ok(())
+        self.del(SERVICES, id)
     }
 
     pub fn delete_services_for_device(&self, device_id: &str) -> Result<()> {
         let svcs = self.list_services_for_device(device_id)?;
         if !svcs.is_empty() {
-            let rw = self.inner.rw_transaction()?;
-            for svc in svcs {
-                rw.remove(svc)?;
+            let write = self.inner.begin_write()?;
+            {
+                let mut tbl = write.open_table(SERVICES)?;
+                for svc in &svcs {
+                    tbl.remove(svc.id.as_str())?;
+                }
             }
-            rw.commit()?;
+            write.commit()?;
         }
         Ok(())
     }
@@ -211,15 +213,11 @@ impl Db {
     // ── Probe Results ──
 
     pub fn insert_probe_result(&self, result: ProbeResult) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        rw.insert(result)?;
-        rw.commit()?;
-        Ok(())
+        self.put(PROBES, &result.id, &result)
     }
 
     pub fn list_probe_results(&self, service_id: &str, limit: usize) -> Result<Vec<ProbeResult>> {
-        let r = self.inner.r_transaction()?;
-        let all: Vec<ProbeResult> = r.scan().primary()?.all()?.try_collect()?;
+        let all: Vec<ProbeResult> = self.get_all(PROBES)?;
         let mut filtered: Vec<ProbeResult> = all
             .into_iter()
             .filter(|p| p.service_id == service_id)
@@ -234,53 +232,30 @@ impl Db {
         Ok(results.into_iter().next())
     }
 
-    pub fn get_latest_probe_for_device(&self, device_id: &str) -> Result<Option<ProbeResult>> {
-        let services = self.list_services_for_device(device_id)?;
-        // Find the ICMP service or first service
-        let icmp_svc = services.iter().find(|s| s.probe_type == ProbeType::Icmp);
-        let svc = icmp_svc.or(services.first());
-        if let Some(svc) = svc {
-            self.get_latest_probe(&svc.id)
-        } else {
-            Ok(None)
-        }
-    }
-
     // ── Alerts ──
 
     pub fn insert_alert(&self, alert: Alert) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        rw.insert(alert)?;
-        rw.commit()?;
-        Ok(())
+        self.put(ALERTS, &alert.id, &alert)
     }
 
     pub fn list_alerts(&self, limit: usize) -> Result<Vec<Alert>> {
-        let r = self.inner.r_transaction()?;
-        let all: Vec<Alert> = r.scan().primary()?.all()?.try_collect()?;
-        let mut sorted = all;
-        sorted.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        sorted.truncate(limit);
-        Ok(sorted)
+        let mut all: Vec<Alert> = self.get_all(ALERTS)?;
+        all.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        all.truncate(limit);
+        Ok(all)
     }
 
     pub fn list_active_alerts(&self) -> Result<Vec<Alert>> {
-        let r = self.inner.r_transaction()?;
-        let all: Vec<Alert> = r.scan().primary()?.all()?.try_collect()?;
+        let all: Vec<Alert> = self.get_all(ALERTS)?;
         let mut active: Vec<Alert> = all.into_iter().filter(|a| !a.acknowledged).collect();
         active.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         Ok(active)
     }
 
     pub fn acknowledge_alert(&self, id: &str) -> Result<()> {
-        let r = self.inner.r_transaction()?;
-        if let Some(old) = r.get().primary::<Alert>(id.to_string())? {
-            drop(r);
-            let mut new = old.clone();
-            new.acknowledged = true;
-            let rw = self.inner.rw_transaction()?;
-            rw.update(old, new)?;
-            rw.commit()?;
+        if let Some(mut alert) = self.get_one::<Alert>(ALERTS, id)? {
+            alert.acknowledged = true;
+            self.put(ALERTS, id, &alert)?;
         }
         Ok(())
     }
@@ -292,26 +267,20 @@ impl Db {
     // ── Subnets ──
 
     pub fn list_subnets(&self) -> Result<Vec<Subnet>> {
-        let r = self.inner.r_transaction()?;
-        let items: Vec<Subnet> = r.scan().primary()?.all()?.try_collect()?;
-        Ok(items)
+        self.get_all(SUBNETS)
     }
 
     pub fn get_subnet(&self, id: &str) -> Result<Option<Subnet>> {
-        let r = self.inner.r_transaction()?;
-        Ok(r.get().primary(id.to_string())?)
+        self.get_one(SUBNETS, id)
     }
 
     pub fn get_subnet_by_cidr(&self, cidr: &str) -> Result<Option<Subnet>> {
-        let r = self.inner.r_transaction()?;
-        Ok(r.get().secondary(SubnetKey::cidr, cidr.to_string())?)
+        let all = self.list_subnets()?;
+        Ok(all.into_iter().find(|s| s.cidr == cidr))
     }
 
     pub fn insert_subnet(&self, subnet: Subnet) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        rw.insert(subnet)?;
-        rw.commit()?;
-        Ok(())
+        self.put(SUBNETS, &subnet.id, &subnet)
     }
 
     pub fn upsert_subnet_by_cidr(&self, cidr: &str, name: &str, community: &str) -> Result<()> {
@@ -330,80 +299,43 @@ impl Db {
     }
 
     pub fn update_subnet_last_scan(&self, id: &str, time: &str) -> Result<()> {
-        let r = self.inner.r_transaction()?;
-        if let Some(old) = r.get().primary::<Subnet>(id.to_string())? {
-            drop(r);
-            let mut new = old.clone();
-            new.last_scan = Some(time.to_string());
-            let rw = self.inner.rw_transaction()?;
-            rw.update(old, new)?;
-            rw.commit()?;
+        if let Some(mut subnet) = self.get_one::<Subnet>(SUBNETS, id)? {
+            subnet.last_scan = Some(time.to_string());
+            self.put(SUBNETS, id, &subnet)?;
         }
         Ok(())
     }
 
     pub fn delete_subnet(&self, id: &str) -> Result<()> {
-        if let Some(subnet) = self.get_subnet(id)? {
-            let rw = self.inner.rw_transaction()?;
-            rw.remove(subnet)?;
-            rw.commit()?;
-        }
-        Ok(())
+        self.del(SUBNETS, id)
     }
 
     // ── Map Positions ──
 
     pub fn list_positions(&self) -> Result<Vec<MapPosition>> {
-        let r = self.inner.r_transaction()?;
-        let items: Vec<MapPosition> = r.scan().primary()?.all()?.try_collect()?;
-        Ok(items)
+        self.get_all(POSITIONS)
     }
 
     pub fn get_position(&self, device_id: &str) -> Result<Option<MapPosition>> {
-        let r = self.inner.r_transaction()?;
-        Ok(r.get().primary(device_id.to_string())?)
+        self.get_one(POSITIONS, device_id)
     }
 
     pub fn upsert_position(&self, pos: MapPosition) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        if let Ok(Some(old)) = {
-            let r = self.inner.r_transaction()?;
-            r.get().primary::<MapPosition>(pos.device_id.clone())
-        } {
-            rw.update(old, pos)?;
-        } else {
-            rw.insert(pos)?;
-        }
-        rw.commit()?;
-        Ok(())
+        self.put(POSITIONS, &pos.device_id, &pos)
     }
 
     pub fn delete_position(&self, device_id: &str) -> Result<()> {
-        if let Some(pos) = self.get_position(device_id)? {
-            let rw = self.inner.rw_transaction()?;
-            rw.remove(pos)?;
-            rw.commit()?;
-        }
-        Ok(())
+        self.del(POSITIONS, device_id)
     }
 
     // ── Metrics ──
 
     pub fn insert_metric(&self, metric: Metric) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        rw.insert(metric)?;
-        rw.commit()?;
-        Ok(())
+        self.put(METRICS, &metric.id, &metric)
     }
 
-    pub fn list_metrics(
-        &self,
-        device_id: &str,
-        metric_name: &str,
-        limit: usize,
-    ) -> Result<Vec<Metric>> {
-        let r = self.inner.r_transaction()?;
-        let all: Vec<Metric> = r.scan().primary()?.all()?.try_collect()?;
+    pub fn list_metrics(&self, device_id: &str, metric_name: &str, limit: usize) -> Result<Vec<Metric>> {
+        let all: Vec<Metric> = self.get_all(METRICS)?;
         let mut filtered: Vec<Metric> = all
             .into_iter()
             .filter(|m| m.device_id == device_id && m.metric_name == metric_name)
@@ -417,30 +349,18 @@ impl Db {
     // ── Alert Rules ──
 
     pub fn list_alert_rules(&self) -> Result<Vec<AlertRule>> {
-        let r = self.inner.r_transaction()?;
-        let items: Vec<AlertRule> = r.scan().primary()?.all()?.try_collect()?;
-        Ok(items)
+        self.get_all(ALERT_RULES)
     }
 
     pub fn insert_alert_rule(&self, rule: AlertRule) -> Result<()> {
-        let rw = self.inner.rw_transaction()?;
-        rw.insert(rule)?;
-        rw.commit()?;
-        Ok(())
+        self.put(ALERT_RULES, &rule.id, &rule)
     }
 
     pub fn delete_alert_rule(&self, id: &str) -> Result<()> {
-        let r = self.inner.r_transaction()?;
-        if let Some(rule) = r.get().primary::<AlertRule>(id.to_string())? {
-            drop(r);
-            let rw = self.inner.rw_transaction()?;
-            rw.remove(rule)?;
-            rw.commit()?;
-        }
-        Ok(())
+        self.del(ALERT_RULES, id)
     }
 
-    // ── Device status (composite query) ──
+    // ── Device status (composite) ──
 
     pub fn get_device_statuses(&self) -> Result<Vec<DeviceStatus>> {
         let devices = self.list_devices()?;
@@ -478,7 +398,6 @@ impl Db {
             };
 
             let position = self.get_position(&device.id)?;
-
             statuses.push(DeviceStatus {
                 device,
                 status,
@@ -489,92 +408,86 @@ impl Db {
                 position,
             });
         }
-
         Ok(statuses)
     }
 
-    // ── Bulk delete (for cascading device delete) ──
+    // ── Cascade delete ──
 
     pub fn delete_device_cascade(&self, id: &str) -> Result<()> {
         self.delete_services_for_device(id)?;
         self.delete_interfaces_for_device(id)?;
         self.delete_links_for_device(id)?;
         self.delete_position(id)?;
-        // Delete probe results for this device's services
-        // (already handled since services are deleted)
         self.delete_device(id)?;
         Ok(())
     }
 
-    // ── Retention cleanup ──
+    // ── Retention ──
 
     pub fn cleanup_before(&self, before: &str) -> Result<(usize, usize, usize)> {
-        let mut probes_removed = 0usize;
-        let mut metrics_removed = 0usize;
-        let mut alerts_removed = 0usize;
+        let mut probes_removed = 0;
+        let mut metrics_removed = 0;
+        let mut alerts_removed = 0;
 
-        // Probe results
-        {
-            let r = self.inner.r_transaction()?;
-            let all: Vec<ProbeResult> = r.scan().primary()?.all()?.try_collect()?;
-            let old: Vec<ProbeResult> = all
-                .into_iter()
-                .filter(|p| p.timestamp.as_str() < before)
-                .collect();
-            drop(r);
-            if !old.is_empty() {
-                let rw = self.inner.rw_transaction()?;
-                for item in old {
-                    rw.remove(item)?;
+        // Probes
+        let old_probes: Vec<String> = self.get_all::<ProbeResult>(PROBES)?
+            .into_iter()
+            .filter(|p| p.timestamp.as_str() < before)
+            .map(|p| p.id)
+            .collect();
+        if !old_probes.is_empty() {
+            let write = self.inner.begin_write()?;
+            {
+                let mut tbl = write.open_table(PROBES)?;
+                for id in &old_probes {
+                    tbl.remove(id.as_str())?;
                     probes_removed += 1;
                 }
-                rw.commit()?;
             }
+            write.commit()?;
         }
 
         // Metrics
-        {
-            let r = self.inner.r_transaction()?;
-            let all: Vec<Metric> = r.scan().primary()?.all()?.try_collect()?;
-            let old: Vec<Metric> = all
-                .into_iter()
-                .filter(|m| m.timestamp.as_str() < before)
-                .collect();
-            drop(r);
-            if !old.is_empty() {
-                let rw = self.inner.rw_transaction()?;
-                for item in old {
-                    rw.remove(item)?;
+        let old_metrics: Vec<String> = self.get_all::<Metric>(METRICS)?
+            .into_iter()
+            .filter(|m| m.timestamp.as_str() < before)
+            .map(|m| m.id)
+            .collect();
+        if !old_metrics.is_empty() {
+            let write = self.inner.begin_write()?;
+            {
+                let mut tbl = write.open_table(METRICS)?;
+                for id in &old_metrics {
+                    tbl.remove(id.as_str())?;
                     metrics_removed += 1;
                 }
-                rw.commit()?;
             }
+            write.commit()?;
         }
 
         // Old acknowledged alerts
-        {
-            let r = self.inner.r_transaction()?;
-            let all: Vec<Alert> = r.scan().primary()?.all()?.try_collect()?;
-            let old: Vec<Alert> = all
-                .into_iter()
-                .filter(|a| a.acknowledged && a.created_at.as_str() < before)
-                .collect();
-            drop(r);
-            if !old.is_empty() {
-                let rw = self.inner.rw_transaction()?;
-                for item in old {
-                    rw.remove(item)?;
+        let old_alerts: Vec<String> = self.get_all::<Alert>(ALERTS)?
+            .into_iter()
+            .filter(|a| a.acknowledged && a.created_at.as_str() < before)
+            .map(|a| a.id)
+            .collect();
+        if !old_alerts.is_empty() {
+            let write = self.inner.begin_write()?;
+            {
+                let mut tbl = write.open_table(ALERTS)?;
+                for id in &old_alerts {
+                    tbl.remove(id.as_str())?;
                     alerts_removed += 1;
                 }
-                rw.commit()?;
             }
+            write.commit()?;
         }
 
         Ok((probes_removed, metrics_removed, alerts_removed))
     }
 }
 
-/// Background retention loop — cleans old probe results, metrics, alerts.
+/// Background retention loop.
 pub async fn retention_loop(db: Arc<Db>, config: Arc<crate::config::Config>) {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
     loop {
@@ -585,13 +498,10 @@ pub async fn retention_loop(db: Arc<Db>, config: Arc<crate::config::Config>) {
         match db.cleanup_before(&before_str) {
             Ok((p, m, a)) => {
                 if p + m + a > 0 {
-                    tracing::info!(
-                        "retention cleanup: {} probes, {} metrics, {} alerts removed",
-                        p, m, a
-                    );
+                    tracing::info!("retention: removed {} probes, {} metrics, {} alerts", p, m, a);
                 }
             }
-            Err(e) => tracing::error!("retention cleanup error: {}", e),
+            Err(e) => tracing::error!("retention error: {}", e),
         }
     }
 }

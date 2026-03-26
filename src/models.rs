@@ -1,7 +1,4 @@
 use serde::{Deserialize, Serialize};
-use native_db::*;
-use native_model;
-use native_model::native_model;
 
 // ── Device types ──
 
@@ -211,15 +208,11 @@ impl std::fmt::Display for Severity {
     }
 }
 
-// ── Database models ──
+// ── Data models ──
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 1, version = 1)]
-#[native_db]
 pub struct Device {
-    #[primary_key]
     pub id: String,
-    #[secondary_key(unique)]
     pub ip: String,
     pub name: String,
     pub mac: Option<String>,
@@ -238,12 +231,8 @@ pub struct Device {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 2, version = 1)]
-#[native_db]
 pub struct NetInterface {
-    #[primary_key]
     pub id: String,
-    #[secondary_key]
     pub device_id: String,
     pub name: String,
     pub if_index: Option<i32>,
@@ -257,14 +246,9 @@ pub struct NetInterface {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 3, version = 1)]
-#[native_db]
 pub struct Link {
-    #[primary_key]
     pub id: String,
-    #[secondary_key]
     pub source_device_id: String,
-    #[secondary_key]
     pub target_device_id: String,
     pub source_if_id: Option<String>,
     pub target_if_id: Option<String>,
@@ -273,12 +257,8 @@ pub struct Link {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 4, version = 1)]
-#[native_db]
 pub struct Service {
-    #[primary_key]
     pub id: String,
-    #[secondary_key]
     pub device_id: String,
     pub name: String,
     pub probe_type: ProbeType,
@@ -291,12 +271,8 @@ pub struct Service {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 5, version = 1)]
-#[native_db]
 pub struct ProbeResult {
-    #[primary_key]
     pub id: String,
-    #[secondary_key]
     pub service_id: String,
     pub status: ProbeStatus,
     pub latency_us: Option<i64>,
@@ -305,12 +281,8 @@ pub struct ProbeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 6, version = 1)]
-#[native_db]
 pub struct Alert {
-    #[primary_key]
     pub id: String,
-    #[secondary_key]
     pub device_id: String,
     pub service_id: Option<String>,
     pub severity: Severity,
@@ -320,13 +292,9 @@ pub struct Alert {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 7, version = 1)]
-#[native_db]
 pub struct Subnet {
-    #[primary_key]
     pub id: String,
     pub name: String,
-    #[secondary_key(unique)]
     pub cidr: String,
     pub snmp_community: String,
     pub scan_enabled: bool,
@@ -334,22 +302,15 @@ pub struct Subnet {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 8, version = 1)]
-#[native_db]
 pub struct MapPosition {
-    #[primary_key]
     pub device_id: String,
     pub x: f64,
     pub y: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 9, version = 1)]
-#[native_db]
 pub struct Metric {
-    #[primary_key]
     pub id: String,
-    #[secondary_key]
     pub device_id: String,
     pub metric_name: String,
     pub value: f64,
@@ -357,10 +318,7 @@ pub struct Metric {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[native_model(id = 10, version = 1)]
-#[native_db]
 pub struct AlertRule {
-    #[primary_key]
     pub id: String,
     pub name: String,
     pub device_match: Option<String>,
@@ -373,7 +331,7 @@ pub struct AlertRule {
     pub enabled: bool,
 }
 
-// ── View models (not stored, used for rendering) ──
+// ── View models (not stored) ──
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DeviceStatus {
@@ -384,6 +342,25 @@ pub struct DeviceStatus {
     pub services_total: usize,
     pub latency_us: Option<i64>,
     pub position: Option<MapPosition>,
+}
+
+impl DeviceStatus {
+    pub fn latency_ms(&self) -> String {
+        match self.latency_us {
+            Some(v) => format!("{}ms", v / 1000),
+            None => "-".into(),
+        }
+    }
+}
+
+impl NetInterface {
+    pub fn speed_display(&self) -> String {
+        match self.speed_mbps {
+            Some(s) if s >= 1000 => format!("{}G", s / 1000),
+            Some(s) => format!("{}M", s),
+            None => "-".into(),
+        }
+    }
 }
 
 // ── Request types ──
