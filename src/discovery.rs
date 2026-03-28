@@ -713,14 +713,15 @@ pub fn ping_host_sync(ip: &str, timeout_ms: u64) -> bool {
         Err(_) => return false,
     };
 
-    // Try DGRAM ICMP first (unprivileged), then RAW, then TCP fallback
+    // Try RAW ICMP first (needs CAP_NET_RAW), then DGRAM (unprivileged), then TCP fallback
+    // RAW gives us IP headers so we can verify source IP
     let raw_type = Type::from(libc::SOCK_RAW);
     let dgram_type = Type::DGRAM;
     let icmp_proto = Protocol::ICMPV4;
 
-    let (sock, is_dgram) = match Socket::new(Domain::IPV4, dgram_type, Some(icmp_proto)) {
+    let (sock, is_raw) = match Socket::new(Domain::IPV4, raw_type, Some(icmp_proto)) {
         Ok(s) => (s, true),
-        Err(_) => match Socket::new(Domain::IPV4, raw_type, Some(icmp_proto)) {
+        Err(_) => match Socket::new(Domain::IPV4, dgram_type, Some(icmp_proto)) {
             Ok(s) => (s, false),
             Err(_) => {
                 return tcp_probe_sync(ip, 80, timeout_ms)
@@ -733,9 +734,7 @@ pub fn ping_host_sync(ip: &str, timeout_ms: u64) -> bool {
     sock.set_read_timeout(Some(Duration::from_millis(timeout_ms))).ok();
     sock.set_write_timeout(Some(Duration::from_millis(timeout_ms))).ok();
 
-    // Connect to target so recv only gets replies from this IP
     let dest: SockAddr = SocketAddr::new(addr, 0).into();
-    let _ = sock.connect(&dest);
 
     // Build ICMP echo request
     let id = (std::process::id() & 0xFFFF) as u16;
@@ -751,11 +750,11 @@ pub fn ping_host_sync(ip: &str, timeout_ms: u64) -> bool {
     packet[2] = (cksum >> 8) as u8;
     packet[3] = (cksum & 0xFF) as u8;
 
-    if sock.send(&packet).is_err() {
+    if sock.send_to(&packet, &dest).is_err() {
         return false;
     }
 
-    // Read responses — retry a few times to skip error responses
+    // Read responses — check source IP and ICMP type
     let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
     let mut buf = [MaybeUninit::<u8>::uninit(); 512];
     loop {
@@ -765,32 +764,58 @@ pub fn ping_host_sync(ip: &str, timeout_ms: u64) -> bool {
         }
         sock.set_read_timeout(Some(remaining)).ok();
 
-        match sock.recv(&mut buf) {
-            Ok(n) if n >= 4 => {
+        match sock.recv_from(&mut buf) {
+            Ok((n, from_addr)) if n >= 4 => {
                 let data: Vec<u8> = buf[..n].iter().map(|b| unsafe { b.assume_init() }).collect();
 
-                // DGRAM sockets strip IP header; RAW sockets include it
-                let offset = if !is_dgram && data[0] >> 4 == 4 {
-                    ((data[0] & 0x0F) as usize) * 4
+                if is_raw {
+                    // RAW socket: IP header included, check source IP
+                    if n < 28 { continue; } // need IP header + ICMP header
+                    let ihl = ((data[0] & 0x0F) as usize) * 4;
+                    if ihl + 4 > n { continue; }
+
+                    // Source IP is at bytes 12-15 of IP header
+                    let src_ip = Ipv4Addr::new(data[12], data[13], data[14], data[15]);
+                    let icmp_type = data[ihl];
+
+                    // Type 0 from target IP = echo reply = success
+                    if icmp_type == 0 && src_ip == target_v4 {
+                        return true;
+                    }
+                    // Type 3 = destination unreachable (from router) = host doesn't exist
+                    if icmp_type == 3 {
+                        return false;
+                    }
+                    // Type 11 = time exceeded
+                    if icmp_type == 11 {
+                        return false;
+                    }
+                    // Something else — keep reading
+                    continue;
                 } else {
-                    0
-                };
+                    // DGRAM socket: no IP header, but from_addr has source
+                    let icmp_type = data[0];
 
-                if offset >= n { return false; }
-                let icmp_type = data[offset];
+                    // Check if response came from our target
+                    let from_ip = from_addr.as_socket_ipv4()
+                        .map(|a| *a.ip());
 
-                // Type 0 = echo reply — success
-                if icmp_type == 0 {
-                    return true;
+                    // Type 0 from target = echo reply = success
+                    if icmp_type == 0 && from_ip == Some(target_v4) {
+                        return true;
+                    }
+                    // Type 3 = destination unreachable
+                    if icmp_type == 3 {
+                        return false;
+                    }
+                    if icmp_type == 11 {
+                        return false;
+                    }
+                    continue;
                 }
-                // Type 3 = destination unreachable — host doesn't exist
-                if icmp_type == 3 {
-                    return false;
-                }
-                // Other ICMP type — keep waiting for echo reply
-                continue;
             }
-            _ => return false,
+            Ok(_) => continue,
+            Err(_) => return false,
         }
     }
 }
