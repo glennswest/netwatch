@@ -374,28 +374,56 @@ impl Db {
 
     pub fn get_device_statuses(&self) -> Result<Vec<DeviceStatus>> {
         let devices = self.list_devices()?;
+        let all_services = self.list_services()?;
+        let all_latest: Vec<ProbeResult> = self.get_all(LATEST_PROBES)?;
+        let all_positions = self.list_positions()?;
+
+        // Index services by device_id
+        let mut svc_by_device: std::collections::HashMap<String, Vec<&Service>> =
+            std::collections::HashMap::new();
+        for svc in &all_services {
+            svc_by_device.entry(svc.device_id.clone()).or_default().push(svc);
+        }
+
+        // Index latest probes by service_id
+        let mut probe_by_svc: std::collections::HashMap<String, &ProbeResult> =
+            std::collections::HashMap::new();
+        for probe in &all_latest {
+            probe_by_svc.insert(probe.service_id.clone(), probe);
+        }
+
+        // Index positions by device_id
+        let mut pos_by_device: std::collections::HashMap<String, &MapPosition> =
+            std::collections::HashMap::new();
+        for pos in &all_positions {
+            pos_by_device.insert(pos.device_id.clone(), pos);
+        }
+
         let mut statuses = Vec::with_capacity(devices.len());
 
         for device in devices {
-            let services = self.list_services_for_device(&device.id)?;
+            let services = svc_by_device.get(&device.id);
+            let svc_count = services.map_or(0, |v| v.len());
             let mut up = 0usize;
             let mut down = 0usize;
             let mut latency = None;
 
-            for svc in &services {
-                if let Some(probe) = self.get_latest_probe(&svc.id)? {
-                    match probe.status {
-                        ProbeStatus::Up => up += 1,
-                        ProbeStatus::Down => down += 1,
-                        _ => {}
-                    }
-                    if svc.probe_type == ProbeType::Icmp {
-                        latency = probe.latency_us;
+            if let Some(svcs) = services {
+                for svc in svcs {
+                    if let Some(probe) = probe_by_svc.get(&svc.id) {
+                        match probe.status {
+                            ProbeStatus::Up => up += 1,
+                            ProbeStatus::Down => down += 1,
+                            _ => {}
+                        }
+                        if svc.probe_type == ProbeType::Icmp {
+                            latency = probe.latency_us;
+                        }
                     }
                 }
             }
 
-            let status = if services.is_empty() {
+            let status = if svc_count == 0 {
                 ProbeStatus::Unknown
             } else if down > 0 && up == 0 {
                 ProbeStatus::Down
@@ -407,13 +435,13 @@ impl Db {
                 ProbeStatus::Unknown
             };
 
-            let position = self.get_position(&device.id)?;
+            let position = pos_by_device.get(&device.id).cloned().cloned();
             statuses.push(DeviceStatus {
                 device,
                 status,
                 services_up: up,
                 services_down: down,
-                services_total: services.len(),
+                services_total: svc_count,
                 latency_us: latency,
                 position,
             });
