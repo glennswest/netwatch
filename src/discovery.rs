@@ -224,9 +224,19 @@ async fn scan_subnet(
 
     let mut found = 0usize;
 
-    // Collect all IPs to scan
+    // Collect all IPs to scan (skip network and broadcast addresses)
     let ips: Vec<Ipv4Addr> = match network {
-        IpNetwork::V4(net) => net.iter().collect(),
+        IpNetwork::V4(net) => {
+            let prefix = net.prefix();
+            if prefix >= 31 {
+                // /31 and /32 — include all addresses
+                net.iter().collect()
+            } else {
+                let net_addr = net.network();
+                let bcast = net.broadcast();
+                net.iter().filter(|ip| *ip != net_addr && *ip != bcast).collect()
+            }
+        }
         _ => return Ok(0),
     };
 
@@ -263,6 +273,11 @@ async fn scan_subnet(
             if new.mac.is_none() {
                 new.mac = arp_lookup(&ip_str);
             }
+            // Probe SNMP reachability on re-scan
+            let snmp_comm = new.snmp_community.clone().unwrap_or_else(|| community.clone());
+            let snmp_ok = snmp::snmp_probe(&ip_str, &snmp_comm, timeout).await.is_some();
+            new.snmp_reachable = Some(snmp_ok);
+            new.snmp_last_checked = Some(chrono::Utc::now().to_rfc3339());
             let _ = db.update_device(old, new);
             continue;
         }
@@ -274,10 +289,12 @@ async fn scan_subnet(
         let mut sys_descr = None;
         let mut sys_object_id = None;
         let mut location = None;
+        let mut snmp_reachable = false;
 
         if let Ok((sname, sdescr, soid, sloc, _uptime)) =
             snmp::snmp_system_info(&ip_str, &comm, timeout).await
         {
+            snmp_reachable = true;
             if !sname.is_empty() {
                 name = sname;
             }
@@ -345,6 +362,8 @@ async fn scan_subnet(
             labels,
             enabled: true,
             last_seen: Some(now.clone()),
+            snmp_reachable: Some(snmp_reachable),
+            snmp_last_checked: Some(now.clone()),
             created_at: now.clone(),
             updated_at: now,
         };

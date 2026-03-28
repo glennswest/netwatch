@@ -404,6 +404,73 @@ th.sortable::after {
 th.sortable.sort-asc::after { content: "\2191"; opacity: 0.8; }
 th.sortable.sort-desc::after { content: "\2193"; opacity: 0.8; }
 
+/* SNMP instructions */
+.snmp-instructions-row:hover { background: transparent; }
+
+.snmp-instructions {
+    border-top: 1px solid var(--border);
+}
+
+.snmp-instructions-toggle {
+    display: block;
+    padding: 0.5rem 1rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+
+.snmp-instructions-toggle::-webkit-details-marker { display: none; }
+
+.snmp-instructions-toggle::before {
+    content: "\25B6 ";
+    font-size: 0.65rem;
+    transition: transform 0.15s;
+    display: inline-block;
+}
+
+details.snmp-instructions[open] > .snmp-instructions-toggle::before {
+    transform: rotate(90deg);
+}
+
+.snmp-instructions-toggle:hover { color: var(--text-secondary); }
+
+.snmp-instructions-body {
+    padding: 0.5rem 1rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.snmp-cmd-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.snmp-cmd-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.snmp-cmd {
+    background: #0d0f14;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--success);
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
+    line-height: 1.5;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .nav-links { gap: 0; overflow-x: auto; }

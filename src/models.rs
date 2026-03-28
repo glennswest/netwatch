@@ -71,6 +71,10 @@ impl DeviceType {
             Self::Other => "#6b7084",
         }
     }
+
+    pub fn is_infrastructure(&self) -> bool {
+        matches!(self, Self::Router | Self::Switch | Self::Firewall | Self::Ap | Self::Server)
+    }
 }
 
 impl std::fmt::Display for DeviceType {
@@ -228,6 +232,10 @@ pub struct Device {
     pub labels: std::collections::HashMap<String, String>,
     pub enabled: bool,
     pub last_seen: Option<String>,
+    #[serde(default)]
+    pub snmp_reachable: Option<bool>,
+    #[serde(default)]
+    pub snmp_last_checked: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

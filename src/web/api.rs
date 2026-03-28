@@ -55,6 +55,8 @@ pub async fn create_device(
         labels: std::collections::HashMap::new(),
         enabled: true,
         last_seen: None,
+        snmp_reachable: None,
+        snmp_last_checked: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -417,6 +419,41 @@ pub async fn auto_layout(State(state): State<AppState>) -> impl IntoResponse {
         Ok(positions) => Json(positions).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
+}
+
+// ── SNMP Probe ──
+
+pub async fn probe_device_snmp(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let device = match state.db.get_device(&id) {
+        Ok(Some(d)) => d,
+        Ok(None) => return (StatusCode::NOT_FOUND, "device not found").into_response(),
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+
+    let community = device
+        .snmp_community
+        .as_deref()
+        .unwrap_or(&state.config.discovery.snmp_community)
+        .to_string();
+
+    let result = crate::snmp::snmp_probe(&device.ip, &community, 3000).await;
+    let now = chrono::Utc::now().to_rfc3339();
+    let reachable = result.is_some();
+
+    let mut updated = device.clone();
+    updated.snmp_reachable = Some(reachable);
+    updated.snmp_last_checked = Some(now);
+    updated.updated_at = chrono::Utc::now().to_rfc3339();
+    let _ = state.db.update_device(device, updated);
+
+    Json(serde_json::json!({
+        "reachable": reachable,
+        "sys_name": result.unwrap_or_default(),
+    }))
+    .into_response()
 }
 
 // ── Metrics ──

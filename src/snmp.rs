@@ -527,6 +527,41 @@ pub async fn snmp_system_info(
     ))
 }
 
+/// Vendor-specific CLI commands to enable SNMP on a device.
+pub fn snmp_enable_instructions(vendor: &str) -> Vec<(&'static str, &'static str)> {
+    match vendor.to_lowercase().as_str() {
+        "mikrotik" => vec![
+            ("RouterOS CLI", "/snmp set enabled=yes contact=\"admin\" location=\"rack\" trap-community=public"),
+            ("RouterOS community", "/snmp community set public addresses=0.0.0.0/0 read-access=yes"),
+        ],
+        "cisco" => vec![
+            ("IOS enable", "snmp-server community public RO\nsnmp-server location \"rack\"\nsnmp-server contact admin"),
+            ("IOS save", "write memory"),
+        ],
+        "ubiquiti" => vec![
+            ("EdgeOS/VyOS", "set service snmp community public authorization ro\ncommit; save"),
+            ("UniFi Controller", "Settings > Services > SNMP > Enable SNMPv1/v2c, community: public"),
+        ],
+        "juniper" => vec![
+            ("JunOS", "set snmp community public authorization read-only\ncommit"),
+        ],
+        "hpe/aruba" | "hp" | "aruba" => vec![
+            ("ProCurve/ArubaOS-Switch", "snmp-server community public unrestricted\nwrite memory"),
+            ("ArubaOS-CX", "snmp-server community public\nwrite memory"),
+        ],
+        "fortinet" => vec![
+            ("FortiOS", "config system snmp community\nedit 1\nset name public\nset events cpu-high mem-low\nnext\nend"),
+        ],
+        "linux" | "microsoft" => vec![
+            ("net-snmp (Debian/Ubuntu)", "apt install snmpd\nsed -i 's/agentaddress .*/agentaddress udp:161/' /etc/snmp/snmpd.conf\nsystemctl restart snmpd"),
+            ("net-snmp (RHEL/CentOS)", "yum install net-snmp\nsystemctl enable --now snmpd"),
+        ],
+        _ => vec![
+            ("Generic", "Consult vendor documentation to enable SNMP v2c with community string 'public' on UDP port 161."),
+        ],
+    }
+}
+
 /// Guess device type from sysDescr / sysObjectID.
 pub fn guess_device_type(sys_descr: &str, sys_object_id: &str) -> crate::models::DeviceType {
     let desc = sys_descr.to_lowercase();

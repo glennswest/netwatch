@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 2026-03-27
+- **feat:** Infrastructure page (`/ui/infrastructure`) — shows SNMP status for routers, switches, APs, firewalls, servers
+- **feat:** SNMP reachability tracking — `snmp_reachable` and `snmp_last_checked` fields on Device
+- **feat:** On-demand SNMP probe API (`POST /api/devices/{id}/snmp-probe`)
+- **feat:** Vendor-specific SNMP enable commands (MikroTik, Cisco, Ubiquiti, Juniper, HPE/Aruba, Fortinet, Linux)
+- **feat:** `DeviceType::is_infrastructure()` helper method
+- **feat:** Discovery sets SNMP reachability on both new and re-scanned devices
+- **fix:** Skip network (.0) and broadcast (.255) addresses during subnet scan
+
 ## [v0.2.0] — 2026-03-27
 
 ### Added

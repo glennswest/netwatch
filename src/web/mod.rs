@@ -37,6 +37,7 @@ pub fn router(state: AppState) -> Router {
         .route("/ui/services", get(pages::services))
         .route("/ui/alerts", get(pages::alerts))
         .route("/ui/discovery", get(pages::discovery))
+        .route("/ui/infrastructure", get(pages::infrastructure))
         .route("/ui/performance", get(pages::performance))
         .route("/ui/settings", get(pages::settings))
         // HTMX partials
@@ -63,6 +64,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/subnets", get(api::list_subnets).post(api::create_subnet))
         .route("/api/subnets/{id}", delete(api::delete_subnet))
         .route("/api/discovery/scan", post(api::trigger_scan))
+        .route("/api/devices/{id}/snmp-probe", post(api::probe_device_snmp))
         .route("/api/map/positions", get(api::list_positions).put(api::update_position))
         .route("/api/map/auto-layout", post(api::auto_layout))
         .route("/api/metrics", get(api::query_metrics))

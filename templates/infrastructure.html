@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Infrastructure — Netwatch{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Infrastructure</h1>
+</div>
+
+{% if devices.is_empty() %}
+<div class="empty-state">No infrastructure devices discovered yet</div>
+{% else %}
+<div class="table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Name</th>
+                <th>IP</th>
+                <th>Type</th>
+                <th>Vendor</th>
+                <th>SNMP</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in devices %}
+            <tr>
+                <td><span class="badge {{ d.status.badge_class() }}">{{ d.status.as_str() }}</span></td>
+                <td><a href="/ui/devices/{{ d.device.id }}">{{ d.device.name }}</a></td>
+                <td class="mono">{{ d.device.ip }}</td>
+                <td>{{ d.device.device_type.as_str() }}</td>
+                <td>{% match d.device.vendor %}{% when Some with (v) %}{{ v }}{% when None %}-{% endmatch %}</td>
+                <td id="snmp-badge-{{ d.device.id }}">
+                    {% if d.snmp_ok %}
+                    <span class="badge badge-success">OK</span>
+                    {% else %}
+                    <span class="badge badge-danger">NO</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-sm"
+                            hx-post="/api/devices/{{ d.device.id }}/snmp-probe"
+                            hx-target="#snmp-result-{{ d.device.id }}"
+                            hx-swap="innerHTML"
+                            hx-indicator="#snmp-spin-{{ d.device.id }}"
+                            onclick="this.disabled=true; setTimeout(()=>this.disabled=false, 4000)">
+                        Check
+                    </button>
+                    <span class="htmx-indicator" id="snmp-spin-{{ d.device.id }}">probing...</span>
+                    <span id="snmp-result-{{ d.device.id }}"></span>
+                </td>
+            </tr>
+            {% if !d.snmp_ok %}
+            <tr class="snmp-instructions-row">
+                <td colspan="7" style="padding: 0;">
+                    <details class="snmp-instructions">
+                        <summary class="snmp-instructions-toggle">Show SNMP enable commands{% match d.device.vendor %}{% when Some with (v) %} ({{ v }}){% when None %}{% endmatch %}</summary>
+                        <div class="snmp-instructions-body">
+                            {% for instr in d.snmp_instructions %}
+                            <div class="snmp-cmd-block">
+                                <div class="snmp-cmd-label">{{ instr.0 }}</div>
+                                <pre class="snmp-cmd">{{ instr.1 }}</pre>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </details>
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.body.addEventListener('htmx:afterRequest', function(evt) {
+    if (evt.detail.pathInfo && evt.detail.pathInfo.requestPath && evt.detail.pathInfo.requestPath.includes('/snmp-probe')) {
+        try {
+            var data = JSON.parse(evt.detail.xhr.responseText);
+            var id = evt.detail.pathInfo.requestPath.split('/')[3];
+            var badge = document.getElementById('snmp-badge-' + id);
+            if (badge) {
+                badge.innerHTML = data.reachable
+                    ? '<span class="badge badge-success">OK</span>'
+                    : '<span class="badge badge-danger">NO</span>';
+            }
+            var result = evt.detail.target;
+            if (result) {
+                result.textContent = data.reachable ? 'SNMP OK' : 'No response';
+                result.className = data.reachable ? 'text-success' : 'text-danger';
+            }
+        } catch(e) {}
+    }
+});
+</script>
+{% endblock %}

@@ -687,6 +687,70 @@ struct SettingsTemplate {
     has_webhook: bool,
 }
 
+// ── Infrastructure ──
+
+pub struct InfraDeviceRow {
+    pub device: Device,
+    pub status: ProbeStatus,
+    pub snmp_ok: bool,
+    pub snmp_instructions: Vec<(String, String)>,
+}
+
+#[derive(Template)]
+#[template(path = "infrastructure.html")]
+struct InfrastructureTemplate {
+    active: String,
+    version: &'static str,
+    devices: Vec<InfraDeviceRow>,
+}
+
+pub async fn infrastructure(State(state): State<AppState>) -> impl IntoResponse {
+    let db = state.db.clone();
+    let devices = tokio::task::spawn_blocking(move || {
+        let statuses = db.get_device_statuses().unwrap_or_default();
+        let mut rows = Vec::new();
+        for ds in statuses {
+            if !ds.device.device_type.is_infrastructure() {
+                continue;
+            }
+            let snmp_ok = ds.device.snmp_reachable.unwrap_or(false);
+            let vendor_str = ds.device.vendor.as_deref().unwrap_or("");
+            let instructions: Vec<(String, String)> = crate::snmp::snmp_enable_instructions(vendor_str)
+                .into_iter()
+                .map(|(l, c)| (l.to_string(), c.to_string()))
+                .collect();
+            rows.push(InfraDeviceRow {
+                device: ds.device,
+                status: ds.status,
+                snmp_ok,
+                snmp_instructions: instructions,
+            });
+        }
+        // Sort by IP
+        rows.sort_by(|a, b| {
+            let a_ip: Option<std::net::IpAddr> = a.device.ip.parse().ok();
+            let b_ip: Option<std::net::IpAddr> = b.device.ip.parse().ok();
+            match (a_ip, b_ip) {
+                (Some(std::net::IpAddr::V4(a4)), Some(std::net::IpAddr::V4(b4))) => {
+                    a4.octets().cmp(&b4.octets())
+                }
+                _ => a.device.ip.cmp(&b.device.ip),
+            }
+        });
+        rows
+    })
+    .await
+    .unwrap();
+
+    HtmlTemplate(InfrastructureTemplate {
+        active: "infra".into(),
+        version: crate::VERSION,
+        devices,
+    })
+}
+
+// ── Settings ──
+
 pub async fn settings(State(state): State<AppState>) -> impl IntoResponse {
     let db = state.db.clone();
     let rules = tokio::task::spawn_blocking(move || {
