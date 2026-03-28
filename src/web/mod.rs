@@ -56,6 +56,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/services/{id}", delete(api::delete_service))
         .route("/api/services/{id}/probes", get(api::list_probes))
         .route("/api/alerts", get(api::list_alerts))
+        .route("/api/alerts/clear", delete(api::clear_all_alerts))
         .route("/api/alerts/{id}/ack", post(api::acknowledge_alert))
         .route("/api/alerts/{id}", delete(api::delete_alert))
         .route("/api/subnets", get(api::list_subnets).post(api::create_subnet))

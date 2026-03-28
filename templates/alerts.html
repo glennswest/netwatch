@@ -3,7 +3,14 @@
 {% block content %}
 <div class="page-header">
     <h1>Alerts</h1>
-    <span class="htmx-indicator" id="alerts-loading">refreshing...</span>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+        <button class="btn btn-danger btn-sm"
+                hx-delete="/api/alerts/clear"
+                hx-target="#alerts-table-body"
+                hx-swap="innerHTML"
+                hx-confirm="Clear all alerts?">Clear All</button>
+        <span class="htmx-indicator" id="alerts-loading">refreshing...</span>
+    </div>
 </div>
 
 <div class="table-wrap">

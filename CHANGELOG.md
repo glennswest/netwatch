@@ -19,6 +19,13 @@
 - **fix:** Suppress device_discovered and probe toast spam — only show alerts and discovery_complete
 - **fix:** Force rust_embed to pick up updated static assets (sorting CSS/JS)
 - **perf:** Discovery interval 300s→900s, monitoring concurrency 50→20 to reduce ping storms
+- **feat:** MAC OUI-based vendor identification (MikroTik, Ubiquiti, Cisco, Amazon, Apple, etc.)
+- **feat:** MAC OUI-based device type classification (router, AP, switch, camera, phone)
+- **feat:** Only add monitoring services for infrastructure devices (router/switch/AP/firewall/server)
+- **feat:** Device labels (key-value attributes, like Kubernetes labels)
+- **feat:** Clear All Alerts button + API endpoint (`DELETE /api/alerts/clear`)
+- **feat:** ARP cache MAC lookup for directly-connected devices
+- **fix:** Existing devices get MAC backfilled on re-scan if missing
 
 ### 2026-03-26
 - **feat:** Initial project creation — complete network monitoring app

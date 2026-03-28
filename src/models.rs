@@ -224,6 +224,7 @@ pub struct Device {
     pub sys_object_id: Option<String>,
     pub location: Option<String>,
     pub notes: Option<String>,
+    pub labels: std::collections::HashMap<String, String>,
     pub enabled: bool,
     pub last_seen: Option<String>,
     pub created_at: String,

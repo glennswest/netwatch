@@ -52,6 +52,7 @@ pub async fn create_device(
         sys_object_id: None,
         location: req.location,
         notes: req.notes,
+        labels: std::collections::HashMap::new(),
         enabled: true,
         last_seen: None,
         created_at: now.clone(),
@@ -272,6 +273,14 @@ pub async fn delete_alert(
     // Reuse acknowledge — we don't hard-delete alerts via API normally
     match state.db.acknowledge_alert(&id) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
+pub async fn clear_all_alerts(State(state): State<AppState>) -> impl IntoResponse {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db.clear_all_alerts()).await.unwrap() {
+        Ok(count) => Json(serde_json::json!({"cleared": count})).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }

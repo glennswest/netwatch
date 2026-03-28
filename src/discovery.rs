@@ -155,12 +155,36 @@ async fn scan_subnet(
         // Try to get MAC from ARP cache
         let mac = arp_lookup(&ip_str);
 
+        // MAC-based vendor/type identification (when SNMP didn't identify)
+        if let Some(ref m) = mac {
+            if vendor.is_none() {
+                vendor = oui_vendor(m);
+            }
+            if device_type == DeviceType::Other {
+                device_type = oui_device_type(m);
+            }
+        }
+
         // Try reverse DNS
         if name == ip_str {
             if let Ok(hostname) = dns_reverse(&ip_str) {
                 name = hostname;
             }
         }
+
+        let is_infrastructure = matches!(
+            device_type,
+            DeviceType::Router | DeviceType::Switch | DeviceType::Firewall | DeviceType::Ap | DeviceType::Server
+        );
+
+        let mut labels = std::collections::HashMap::new();
+        if !is_infrastructure {
+            labels.insert("monitor".to_string(), "false".to_string());
+        }
+        if let Some(ref v) = vendor {
+            labels.insert("vendor".to_string(), v.to_lowercase());
+        }
+        let type_str = device_type.as_str().to_string();
 
         let now = chrono::Utc::now().to_rfc3339();
         let device = Device {
@@ -176,6 +200,7 @@ async fn scan_subnet(
             sys_object_id,
             location,
             notes: None,
+            labels,
             enabled: true,
             last_seen: Some(now.clone()),
             created_at: now.clone(),
@@ -188,10 +213,10 @@ async fn scan_subnet(
             continue;
         }
 
-        tracing::info!("discovery: found new device {} ({})", ip_str, device_id);
+        tracing::info!("discovery: found {} {} ({})", type_str, ip_str, device_id);
 
-        // Auto-add ICMP service
-        if auto_add {
+        // Only add monitoring services for infrastructure devices
+        if auto_add && is_infrastructure {
             let svc = Service {
                 id: uuid::Uuid::new_v4().to_string(),
                 device_id: device_id.clone(),
@@ -207,8 +232,8 @@ async fn scan_subnet(
             let _ = db.insert_service(svc);
         }
 
-        // Port scan and auto-add services
-        if auto_add {
+        // Port scan and auto-add services — only for infrastructure
+        if auto_add && is_infrastructure {
             let open_ports = scan_ports_fast(&ip_str, &scan_ports, 1500).await;
             for port in open_ports {
                 let (svc_name, probe_type) = port_to_service(port);
@@ -572,6 +597,87 @@ pub async fn scan_ports_fast(ip: &str, ports: &[u16], timeout_ms: u64) -> Vec<u1
         }
     }
     open
+}
+
+/// Identify vendor from MAC OUI prefix.
+fn oui_vendor(mac: &str) -> Option<String> {
+    let prefix = mac.replace(':', "").replace('-', "").to_uppercase();
+    if prefix.len() < 6 { return None; }
+    let oui = &prefix[..6];
+    let vendor = match oui {
+        // MikroTik
+        "2C:CF:67" | "2CCF67" | "4C5E0C" | "6C3B6B" | "D4CA6D" | "E4:8D:8C" | "E48D8C"
+        | "48A98A" | "74:4D:28" | "744D28" | "CC2DE0" | "B8:69:F4" | "B869F4" => Some("MikroTik"),
+        // Ubiquiti
+        "24A43C" | "788A20" | "802AA8" | "B4FBE4" | "DC9FDB" | "F09FC2"
+        | "FCECDA" | "AC8BA9" | "E063DA" | "245A4C" | "687251" | "18E829" => Some("Ubiquiti"),
+        // Cisco
+        "000C29" | "001B2A" | "00265E" | "002CC8" | "005056" | "00A2EE"
+        | "0CD996" | "503DE5" | "58971E" | "7C21D8" | "881DFC" | "F4CFE2" => Some("Cisco"),
+        // Juniper
+        "0005860" | "001256" | "002283" | "3C6104" | "5C4527" | "8071B2"
+        | "883FD3" | "9C7D14" | "F01C2D" | "F4B52F" => Some("Juniper"),
+        // Amazon (Blink, Echo, Ring, Fire)
+        "0C47C9" | "18744F" | "34D270" | "40B4CD" | "44D9E7" | "50F5DA"
+        | "68542B" | "6854FD" | "747548" | "84D612" | "A002DC" | "FC65DE"
+        | "F0F0A4" | "FCA183" | "ACE348" | "38F73D" | "940069" | "8871B1" => Some("Amazon"),
+        // Apple
+        "3C22FB" | "A4B197" | "D0817A" | "F0D4F6" | "28FF3C" | "7CD1C3"
+        | "8866A5" | "A860B6" | "D087E2" | "F0B479" | "3C06A7" | "A4D1D2" => Some("Apple"),
+        // Samsung
+        "00265D" | "08D42B" | "1432D1" | "3423BA" | "ACE215" | "C0BDD1"
+        | "D0176A" | "E4B021" | "F0D7AA" | "5CE0C5" => Some("Samsung"),
+        // TP-Link
+        "1C3BF3" | "50C7BF" | "60E327" | "B09575" | "C0E42D" | "E8DE27"
+        | "F4F26D" | "147590" | "A842A1" | "549F13" | "30B49E" => Some("TP-Link"),
+        // Synology
+        "001132" | "0011320" => Some("Synology"),
+        // Dell
+        "002564" | "00B0D0" | "149197" | "204747" | "246E96" | "34E6D7"
+        | "4C7625" | "842B2B" | "B083FE" | "D4AE52" | "F48E38" | "F8BC12" => Some("Dell"),
+        // HP
+        "001083" | "001321" | "00215A" | "0025B3" | "002655" | "3CA82A"
+        | "68B599" | "9457A5" | "A01D48" | "B499BA" | "D4C9EF" | "EC8EB5" => Some("HP"),
+        // Aruba
+        "000B86" | "24DEC6" | "6CF37F" | "94B40F" | "D8C7C8" | "20A6CD" => Some("Aruba"),
+        // Intel
+        "001517" | "0019D1" | "001B21" | "001E65" | "002332" | "3C970E"
+        | "485B39" | "A0369F" | "B4969" | "F8F21E" => Some("Intel"),
+        // Google (Nest, Chromecast)
+        "20DF B9" | "54:60:09" | "546009" | "A47733" | "F4F5D8" | "30FD38" => Some("Google"),
+        _ => None,
+    };
+    vendor.map(String::from)
+}
+
+/// Classify device type from MAC OUI prefix.
+fn oui_device_type(mac: &str) -> DeviceType {
+    let prefix = mac.replace(':', "").replace('-', "").to_uppercase();
+    if prefix.len() < 6 { return DeviceType::Other; }
+    let oui = &prefix[..6];
+    match oui {
+        // MikroTik → Router
+        "2CCF67" | "4C5E0C" | "6C3B6B" | "D4CA6D" | "E48D8C"
+        | "48A98A" | "744D28" | "CC2DE0" | "B869F4" => DeviceType::Router,
+        // Ubiquiti → AP (most common deployment)
+        "24A43C" | "788A20" | "802AA8" | "B4FBE4" | "DC9FDB" | "F09FC2"
+        | "FCECDA" | "AC8BA9" | "E063DA" | "245A4C" | "687251" | "18E829" => DeviceType::Ap,
+        // Aruba → AP
+        "000B86" | "24DEC6" | "6CF37F" | "94B40F" | "D8C7C8" | "20A6CD" => DeviceType::Ap,
+        // Cisco → Switch (common in enterprise)
+        "000C29" | "001B2A" | "00265E" | "002CC8" | "005056" | "00A2EE"
+        | "0CD996" | "503DE5" | "58971E" | "7C21D8" | "881DFC" | "F4CFE2" => DeviceType::Switch,
+        // Amazon (Blink, Echo, Ring) → Camera
+        "0C47C9" | "18744F" | "34D270" | "40B4CD" | "44D9E7" | "50F5DA"
+        | "68542B" | "6854FD" | "747548" | "84D612" | "A002DC" | "FC65DE"
+        | "F0F0A4" | "FCA183" | "ACE348" | "38F73D" | "940069" | "8871B1" => DeviceType::Camera,
+        // Printers (HP, common OUIs)
+        "001083" | "001321" => DeviceType::Printer,
+        // Apple, Samsung, Google → Phone/Other
+        "3C22FB" | "A4B197" | "D0817A" | "F0D4F6" | "28FF3C" | "7CD1C3"
+        | "8866A5" | "A860B6" | "D087E2" | "F0B479" | "3C06A7" | "A4D1D2" => DeviceType::Phone,
+        _ => DeviceType::Other,
+    }
 }
 
 /// Look up MAC address from the local ARP cache (/proc/net/arp).

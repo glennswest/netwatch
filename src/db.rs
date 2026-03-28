@@ -278,6 +278,20 @@ impl Db {
         Ok(self.list_active_alerts()?.len())
     }
 
+    pub fn clear_all_alerts(&self) -> Result<usize> {
+        let alerts: Vec<Alert> = self.get_all(ALERTS)?;
+        let count = alerts.len();
+        let write = self.inner.begin_write()?;
+        {
+            let mut table = write.open_table(ALERTS)?;
+            for alert in &alerts {
+                table.remove(alert.id.as_str())?;
+            }
+        }
+        write.commit()?;
+        Ok(count)
+    }
+
     // ── Subnets ──
 
     pub fn list_subnets(&self) -> Result<Vec<Subnet>> {
