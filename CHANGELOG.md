@@ -8,6 +8,8 @@
 - **fix:** Proper IP header offset detection for DGRAM vs RAW ICMP sockets
 - **fix:** Run initial subnet scan immediately on startup instead of waiting 15 minutes
 - **fix:** Skip non-RFC1918 networks from ping sweep (was scanning public 24.158.x.x/22)
+- **fix:** DNS PTR resolution — try per-subnet DNS servers (non-gateway) before system resolver
+- **fix:** Exclude gateway (.1) from DNS server discovery — gateways forward DNS but lack PTR records
 
 ## [v0.3.0] — 2026-03-27
 

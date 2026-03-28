@@ -165,12 +165,24 @@ pub async fn async_ptr_lookup(
     tokio::task::spawn_blocking(move || ptr_lookup(&ip, &dns_server, timeout_ms)).await?
 }
 
-/// Try multiple DNS servers in order, fall back to system resolver.
+/// Try multiple DNS servers in order (non-gateway first), fall back to system resolver.
 pub async fn resolve_ptr(ip: &str, dns_servers: &[String], timeout_ms: u64) -> Option<String> {
-    for server in dns_servers {
-        if let Ok(name) = async_ptr_lookup(ip.to_string(), server.clone(), timeout_ms).await {
-            if !name.is_empty() && name != ip {
+    // Try non-gateway DNS servers first (they're more likely to have PTR records)
+    // Gateway (.1) often doesn't have reverse DNS configured
+    let mut servers: Vec<&String> = dns_servers.iter().collect();
+    servers.sort_by_key(|s| if s.ends_with(".1") { 1 } else { 0 });
+
+    for server in &servers {
+        match async_ptr_lookup(ip.to_string(), server.to_string(), timeout_ms).await {
+            Ok(name) if !name.is_empty() && name != ip => {
+                tracing::debug!("dns: PTR {} -> {} (via {})", ip, name, server);
                 return Some(name);
+            }
+            Ok(_) => {
+                tracing::debug!("dns: PTR {} empty/self from {}", ip, server);
+            }
+            Err(e) => {
+                tracing::debug!("dns: PTR {} failed via {}: {}", ip, server, e);
             }
         }
     }

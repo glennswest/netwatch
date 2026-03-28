@@ -260,7 +260,7 @@ async fn scan_subnet(
         let mut found_dns: Vec<String> = Vec::new();
         if let IpNetwork::V4(net) = network {
             let base = net.network().octets();
-            let candidates = [1, 199, 252, 253];
+            let candidates = [199, 252, 253];
             for last in candidates {
                 let candidate = format!("{}.{}.{}.{}", base[0], base[1], base[2], last);
                 if crate::dns::async_probe_dns_server(candidate.clone(), 1500).await {
