@@ -28,3 +28,7 @@ spec:
       volumeMounts:
         - name: data
           mountPath: /data
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: netwatch-data
