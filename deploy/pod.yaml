@@ -11,7 +11,7 @@ spec:
   restartPolicy: Always
   containers:
     - name: netwatch
-      image: registry.gt.lo:5000/netwatch:latest
+      image: registry.gt.lo:5000/netwatch:edge
       ports:
         - containerPort: 80
           protocol: TCP

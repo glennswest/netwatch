@@ -38,6 +38,13 @@ pub async fn run(
                 continue;
             }
 
+            // Skip non-infrastructure devices
+            if let Ok(Some(device)) = db.get_device(&svc.device_id) {
+                if device.labels.get("monitor").map(|v| v.as_str()) == Some("false") {
+                    continue;
+                }
+            }
+
             let latest = match db.get_latest_probe(&svc.id) {
                 Ok(Some(p)) => p,
                 _ => continue,

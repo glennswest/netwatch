@@ -2,33 +2,36 @@
 
 ## [Unreleased]
 
-### 2026-03-27
-- **fix:** Web UI hang — `get_latest_probe()` scanned entire probes table per service per device (O(N*M*P))
-- **fix:** Add `LATEST_PROBES` redb table for O(1) latest-probe-per-service lookup
-- **fix:** Wrap all blocking redb calls in `spawn_blocking` to prevent async runtime starvation
-- **perf:** Dashboard, devices, map, services, alerts pages now respond instantly instead of hanging
-- **perf:** Batch-load `build_service_rows` — single table scan instead of N+1 queries per service
-- **perf:** Map filtered to Up/Degraded devices only — no more rendering 500+ down nodes
-- **feat:** Sortable table columns — click headers to sort by status, name, IP, type, latency
-- **feat:** Default sort by IP address (numeric octets) within each network group
-- **fix:** Reduce WebSocket noise — only broadcast probe events for Down/Degraded status changes
-- **feat:** Add g1, g8, g9 subnets (renamed gw to g1); now covers g1/g8/g9/g10/g11/gt
-- **feat:** MAC address discovery via SNMP ifPhysAddress + ARP cache lookup
-- **feat:** MAC column in devices table
-- **feat:** Sortable table headers persist across HTMX auto-refresh
-- **fix:** Suppress device_discovered and probe toast spam — only show alerts and discovery_complete
-- **fix:** Force rust_embed to pick up updated static assets (sorting CSS/JS)
-- **perf:** Discovery interval 300s→900s, monitoring concurrency 50→20 to reduce ping storms
-- **feat:** MAC OUI-based vendor identification (MikroTik, Ubiquiti, Cisco, Amazon, Apple, etc.)
-- **feat:** MAC OUI-based device type classification (router, AP, switch, camera, phone)
-- **feat:** Only add monitoring services for infrastructure devices (router/switch/AP/firewall/server)
-- **feat:** Device labels (key-value attributes, like Kubernetes labels)
-- **feat:** Clear All Alerts button + API endpoint (`DELETE /api/alerts/clear`)
-- **feat:** ARP cache MAC lookup for directly-connected devices
-- **fix:** Existing devices get MAC backfilled on re-scan if missing
-- **feat:** SNMP-based subnet auto-discovery from default gateway (ipAddrTable walk)
-- **feat:** Version number displayed in navigation bar
-- **refactor:** Remove hardcoded subnets from config — all subnets discovered dynamically via SNMP
+## [v0.2.0] — 2026-03-27
+
+### Added
+- SNMP-based subnet auto-discovery from default gateway (ipAddrTable walk)
+- Version number displayed in navigation bar
+- Sortable table columns — click headers to sort by status, name, IP, type, latency
+- Default sort by IP address (numeric octets) within each network group
+- Sortable table headers persist across HTMX auto-refresh
+- MAC address discovery via SNMP ifPhysAddress + ARP cache lookup
+- MAC column in devices table
+- MAC OUI-based vendor identification (MikroTik, Ubiquiti, Cisco, Amazon, Apple, etc.)
+- MAC OUI-based device type classification (router, AP, switch, camera, phone)
+- Only add monitoring services for infrastructure devices (router/switch/AP/firewall/server)
+- Device labels (key-value attributes, like Kubernetes labels)
+- Clear All Alerts button + API endpoint (`DELETE /api/alerts/clear`)
+- ARP cache MAC lookup for directly-connected devices
+- `LATEST_PROBES` redb table for O(1) latest-probe-per-service lookup
+
+### Fixed
+- Web UI hang — `get_latest_probe()` scanned entire probes table per service per device (O(N*M*P))
+- Wrap all blocking redb calls in `spawn_blocking` to prevent async runtime starvation
+- Reduce WebSocket noise — only broadcast probe events for Down/Degraded status changes
+- Suppress device_discovered and probe toast spam — only show alerts and discovery_complete
+- Existing devices get MAC backfilled on re-scan if missing
+
+### Changed
+- Remove hardcoded subnets from config — all subnets discovered dynamically via SNMP
+- Discovery interval 300s→900s, monitoring concurrency 50→20 to reduce ping storms
+- Batch-load `build_service_rows` — single table scan instead of N+1 queries per service
+- Map filtered to Up/Degraded devices only
 
 ### 2026-03-26
 - **feat:** Initial project creation — complete network monitoring app

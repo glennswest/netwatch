@@ -1,6 +1,6 @@
 use crate::models::*;
 use anyhow::Result;
-use redb::{Database, ReadableTable, TableDefinition};
+use redb::{Database, ReadableTable, ReadableTableMetadata, TableDefinition};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -82,6 +82,35 @@ impl Db {
         }
         write.commit()?;
         Ok(())
+    }
+
+    fn clear_table(&self, table: TableDefinition<&str, &[u8]>) -> Result<usize> {
+        let write = self.inner.begin_write()?;
+        let count;
+        {
+            let mut tbl = write.open_table(table)?;
+            count = tbl.len()? as usize;
+            tbl.retain(|_, _| false)?;
+        }
+        write.commit()?;
+        Ok(count)
+    }
+
+    /// Wipe all tables — full database reset.
+    pub fn reset_all(&self) -> Result<usize> {
+        let mut total = 0;
+        total += self.clear_table(DEVICES)?;
+        total += self.clear_table(INTERFACES)?;
+        total += self.clear_table(LINKS)?;
+        total += self.clear_table(SERVICES)?;
+        total += self.clear_table(PROBES)?;
+        total += self.clear_table(ALERTS)?;
+        total += self.clear_table(SUBNETS)?;
+        total += self.clear_table(POSITIONS)?;
+        total += self.clear_table(METRICS)?;
+        total += self.clear_table(ALERT_RULES)?;
+        total += self.clear_table(LATEST_PROBES)?;
+        Ok(total)
     }
 
     // ── Devices ──

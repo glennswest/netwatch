@@ -3,7 +3,15 @@
 {% block content %}
 <div class="page-header">
     <h1>Dashboard</h1>
-    <span class="htmx-indicator" id="dash-loading">refreshing...</span>
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+        <select id="network-filter" class="form-group" onchange="filterNetworks(this.value)" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem 0.6rem;color:var(--text-primary);font-size:0.9rem;">
+            <option value="all">All Networks</option>
+            {% for net in networks %}
+            <option value="{{ net.name }}">{{ net.name }}{% if !net.cidr.is_empty() %} ({{ net.cidr }}){% endif %}</option>
+            {% endfor %}
+        </select>
+        <span class="htmx-indicator" id="dash-loading">refreshing...</span>
+    </div>
 </div>
 
 <div class="card-grid" hx-get="/ui/" hx-trigger="every 10s" hx-select=".card-grid" hx-target="this" hx-swap="outerHTML" hx-indicator="#dash-loading">

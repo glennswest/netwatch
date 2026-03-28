@@ -285,6 +285,14 @@ pub async fn clear_all_alerts(State(state): State<AppState>) -> impl IntoRespons
     }
 }
 
+pub async fn reset_database(State(state): State<AppState>) -> impl IntoResponse {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db.reset_all()).await.unwrap() {
+        Ok(count) => Json(serde_json::json!({"reset": true, "deleted": count})).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    }
+}
+
 // ── Subnets ──
 
 pub async fn list_subnets(State(state): State<AppState>) -> impl IntoResponse {

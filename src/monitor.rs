@@ -36,6 +36,13 @@ pub async fn run(
                 continue;
             }
 
+            // Skip services for non-infrastructure devices (monitor=false label)
+            if let Ok(Some(device)) = db.get_device(&svc.device_id) {
+                if device.labels.get("monitor").map(|v| v.as_str()) == Some("false") {
+                    continue;
+                }
+            }
+
             // Check if it's time to probe this service
             if let Ok(Some(last)) = db.get_latest_probe(&svc.id) {
                 if let Ok(ts) = chrono::DateTime::parse_from_rfc3339(&last.timestamp) {
