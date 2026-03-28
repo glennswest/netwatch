@@ -10,7 +10,7 @@
 </head>
 <body>
     <nav class="navbar">
-        <div class="nav-brand">Netwatch</div>
+        <div class="nav-brand">Netwatch <span class="nav-version">v{{ version }}</span></div>
         <div class="nav-links">
             <a href="/ui/"{% if active == "dashboard" %} class="active"{% endif %}>Dashboard</a>
             <a href="/ui/devices"{% if active == "devices" %} class="active"{% endif %}>Devices</a>

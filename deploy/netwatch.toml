@@ -23,32 +23,5 @@ probe_days = 30
 metric_days = 90
 alert_days = 180
 
-[[subnets]]
-name = "g1"
-cidr = "192.168.1.0/24"
-snmp_community = "public"
-
-[[subnets]]
-name = "g8"
-cidr = "192.168.8.0/24"
-snmp_community = "public"
-
-[[subnets]]
-name = "g9"
-cidr = "192.168.9.0/24"
-snmp_community = "public"
-
-[[subnets]]
-name = "g10"
-cidr = "192.168.10.0/24"
-snmp_community = "public"
-
-[[subnets]]
-name = "g11"
-cidr = "192.168.11.0/24"
-snmp_community = "public"
-
-[[subnets]]
-name = "gt"
-cidr = "192.168.200.0/24"
-snmp_community = "public"
+# Subnets are auto-discovered from the gateway router via SNMP.
+# Add entries here only to override names or SNMP communities.

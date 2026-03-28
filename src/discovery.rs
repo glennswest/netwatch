@@ -20,11 +20,21 @@ pub async fn run(
     // Initial delay to let the system start up
     tokio::time::sleep(Duration::from_secs(5)).await;
 
+    // Auto-discover subnets from the default gateway on first run
+    if let Err(e) = discover_gateway_subnets(&db, &config).await {
+        tracing::warn!("discovery: gateway subnet discovery failed: {}", e);
+    }
+
     let mut interval =
         tokio::time::interval(Duration::from_secs(config.discovery.interval_secs));
 
     loop {
         interval.tick().await;
+
+        // Re-discover subnets from gateway each cycle
+        if let Err(e) = discover_gateway_subnets(&db, &config).await {
+            tracing::warn!("discovery: gateway subnet discovery failed: {}", e);
+        }
 
         let subnets = match db.list_subnets() {
             Ok(s) => s,
@@ -55,6 +65,138 @@ pub async fn run(
 
         let _ = ws_tx.send(r#"{"event":"discovery_complete"}"#.to_string());
     }
+}
+
+/// Discover subnets by SNMP-walking the default gateway's IP address table.
+pub async fn discover_gateway_subnets(db: &Db, config: &Config) -> Result<()> {
+    let gateway = match read_default_gateway() {
+        Some(gw) => gw,
+        None => {
+            tracing::warn!("discovery: cannot determine default gateway");
+            return Ok(());
+        }
+    };
+
+    tracing::info!("discovery: querying gateway {} for subnets via SNMP", gateway);
+    let community = &config.discovery.snmp_community;
+    let timeout = config.discovery.snmp_timeout_ms;
+
+    // Walk IP addresses on the router
+    let addrs = snmp::async_snmp_walk(
+        gateway.clone(),
+        community.clone(),
+        snmp::OID_IP_ADDR_ENTRY_ADDR.to_string(),
+        timeout,
+    )
+    .await?;
+
+    // Walk subnet masks
+    let masks = snmp::async_snmp_walk(
+        gateway.clone(),
+        community.clone(),
+        snmp::OID_IP_ADDR_ENTRY_MASK.to_string(),
+        timeout,
+    )
+    .await?;
+
+    // Build map of index → mask
+    let mask_map: std::collections::HashMap<String, String> = masks
+        .into_iter()
+        .map(|(oid, val)| {
+            // OID suffix is the IP address itself
+            let suffix = oid.strip_prefix(snmp::OID_IP_ADDR_ENTRY_MASK)
+                .unwrap_or(&oid)
+                .trim_start_matches('.');
+            (suffix.to_string(), val.as_string())
+        })
+        .collect();
+
+    for (oid, val) in &addrs {
+        let ip_str = val.as_string();
+
+        // Skip loopback and link-local
+        if ip_str.starts_with("127.") || ip_str.starts_with("169.254.") {
+            continue;
+        }
+
+        // Get the OID suffix (which is the IP)
+        let suffix = oid.strip_prefix(snmp::OID_IP_ADDR_ENTRY_ADDR)
+            .unwrap_or(oid)
+            .trim_start_matches('.');
+
+        let mask_str = match mask_map.get(suffix) {
+            Some(m) => m.clone(),
+            None => continue,
+        };
+
+        // Convert mask to prefix length
+        let prefix_len = mask_to_prefix_len(&mask_str);
+        if prefix_len == 0 || prefix_len > 30 {
+            continue;
+        }
+
+        // Compute network address
+        let ip: Ipv4Addr = match ip_str.parse() {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
+        let mask: Ipv4Addr = match mask_str.parse() {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
+
+        let net_octets: Vec<u8> = ip.octets().iter().zip(mask.octets().iter())
+            .map(|(i, m)| i & m)
+            .collect();
+        let network = Ipv4Addr::new(net_octets[0], net_octets[1], net_octets[2], net_octets[3]);
+        let cidr = format!("{}/{}", network, prefix_len);
+
+        // Generate a name from the network (e.g., "192.168.1" -> auto-name)
+        let name = subnet_name_from_ip(&ip_str);
+
+        tracing::info!("discovery: found subnet {} ({})", cidr, name);
+        let _ = db.upsert_subnet_by_cidr(&cidr, &name, community);
+    }
+
+    Ok(())
+}
+
+/// Read the default gateway from /proc/net/route.
+fn read_default_gateway() -> Option<String> {
+    let content = std::fs::read_to_string("/proc/net/route").ok()?;
+    for line in content.lines().skip(1) {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 3 { continue; }
+        // Default route has destination 00000000
+        if fields[1] == "00000000" {
+            let hex_gw = fields[2];
+            if let Ok(gw) = u32::from_str_radix(hex_gw, 16) {
+                let ip = Ipv4Addr::from(u32::from_be(gw));
+                return Some(ip.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Convert dotted subnet mask to prefix length.
+fn mask_to_prefix_len(mask: &str) -> u32 {
+    let parts: Vec<u8> = mask.split('.').filter_map(|s| s.parse().ok()).collect();
+    if parts.len() != 4 { return 0; }
+    let bits = u32::from_be_bytes([parts[0], parts[1], parts[2], parts[3]]);
+    bits.count_ones()
+}
+
+/// Generate a human-readable subnet name from an IP.
+fn subnet_name_from_ip(ip: &str) -> String {
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() != 4 { return ip.to_string(); }
+    // Common naming: "gX" for 192.168.X.0/24 networks
+    if parts[0] == "192" && parts[1] == "168" {
+        return format!("g{}", parts[2]);
+    }
+    // For 10.x.x.x or other networks
+    format!("net-{}-{}", parts[0], parts[1])
 }
 
 /// Trigger an immediate scan of a specific subnet.

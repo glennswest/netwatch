@@ -210,6 +210,7 @@ pub async fn redirect_dashboard() -> Redirect {
 #[template(path = "dashboard.html")]
 struct DashboardTemplate {
     active: String,
+    version: &'static str,
     device_count: usize,
     devices_up: usize,
     devices_down: usize,
@@ -251,6 +252,7 @@ pub async fn dashboard(State(state): State<AppState>) -> impl IntoResponse {
 
     HtmlTemplate(DashboardTemplate {
         active: "dashboard".into(),
+        version: crate::VERSION,
         device_count,
         devices_up,
         devices_down,
@@ -274,6 +276,7 @@ pub async fn dashboard_cards_partial(State(state): State<AppState>) -> impl Into
 #[template(path = "devices.html")]
 struct DevicesTemplate {
     active: String,
+    version: &'static str,
     networks: Vec<NetworkGroup>,
 }
 
@@ -290,6 +293,7 @@ pub async fn devices(State(state): State<AppState>) -> impl IntoResponse {
     let networks = group_devices_by_network(statuses, &subnets);
     HtmlTemplate(DevicesTemplate {
         active: "devices".into(),
+        version: crate::VERSION,
         networks,
     })
 }
@@ -320,6 +324,7 @@ pub async fn devices_table_partial(State(state): State<AppState>) -> impl IntoRe
 #[template(path = "device_detail.html")]
 struct DeviceDetailTemplate {
     active: String,
+    version: &'static str,
     device: Device,
     status: ProbeStatus,
     interfaces: Vec<NetInterface>,
@@ -411,6 +416,7 @@ pub async fn device_detail(
         Some((device, status, interfaces, services, recent_alerts)) => {
             HtmlTemplate(DeviceDetailTemplate {
                 active: "devices".into(),
+                version: crate::VERSION,
                 device,
                 status,
                 interfaces,
@@ -429,6 +435,7 @@ pub async fn device_detail(
 #[template(path = "map.html")]
 struct MapTemplate {
     active: String,
+    version: &'static str,
     devices_json: String,
     links_json: String,
 }
@@ -490,6 +497,7 @@ pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
 
     HtmlTemplate(MapTemplate {
         active: "map".into(),
+        version: crate::VERSION,
         devices_json: serde_json::to_string(&map_devices).unwrap_or_else(|_| "[]".into()),
         links_json: serde_json::to_string(&map_links).unwrap_or_else(|_| "[]".into()),
     })
@@ -501,6 +509,7 @@ pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
 #[template(path = "services.html")]
 struct ServicesTemplate {
     active: String,
+    version: &'static str,
     networks: Vec<ServiceNetworkGroup>,
 }
 
@@ -531,6 +540,7 @@ pub async fn services(State(state): State<AppState>) -> impl IntoResponse {
     let networks = group_services_by_network(rows, &subnets);
     HtmlTemplate(ServicesTemplate {
         active: "services".into(),
+        version: crate::VERSION,
         networks,
     })
 }
@@ -558,6 +568,7 @@ pub async fn services_table_partial(State(state): State<AppState>) -> impl IntoR
 #[template(path = "alerts.html")]
 struct AlertsTemplate {
     active: String,
+    version: &'static str,
     alerts: Vec<AlertRow>,
 }
 
@@ -585,6 +596,7 @@ pub async fn alerts(State(state): State<AppState>) -> impl IntoResponse {
     .unwrap();
     HtmlTemplate(AlertsTemplate {
         active: "alerts".into(),
+        version: crate::VERSION,
         alerts: rows,
     })
 }
@@ -621,6 +633,7 @@ pub async fn alerts_table_partial(State(state): State<AppState>) -> impl IntoRes
 #[template(path = "discovery.html")]
 struct DiscoveryTemplate {
     active: String,
+    version: &'static str,
     subnets: Vec<Subnet>,
 }
 
@@ -633,6 +646,7 @@ pub async fn discovery(State(state): State<AppState>) -> impl IntoResponse {
     .unwrap();
     HtmlTemplate(DiscoveryTemplate {
         active: "discovery".into(),
+        version: crate::VERSION,
         subnets,
     })
 }
@@ -643,6 +657,7 @@ pub async fn discovery(State(state): State<AppState>) -> impl IntoResponse {
 #[template(path = "performance.html")]
 struct PerformanceTemplate {
     active: String,
+    version: &'static str,
     devices: Vec<Device>,
 }
 
@@ -655,6 +670,7 @@ pub async fn performance(State(state): State<AppState>) -> impl IntoResponse {
     .unwrap();
     HtmlTemplate(PerformanceTemplate {
         active: "performance".into(),
+        version: crate::VERSION,
         devices,
     })
 }
@@ -665,6 +681,7 @@ pub async fn performance(State(state): State<AppState>) -> impl IntoResponse {
 #[template(path = "settings.html")]
 struct SettingsTemplate {
     active: String,
+    version: &'static str,
     rules: Vec<AlertRule>,
     has_email: bool,
     has_webhook: bool,
@@ -679,6 +696,7 @@ pub async fn settings(State(state): State<AppState>) -> impl IntoResponse {
     .unwrap();
     HtmlTemplate(SettingsTemplate {
         active: "settings".into(),
+        version: crate::VERSION,
         rules,
         has_email: state.config.alerting.email.is_some(),
         has_webhook: state.config.alerting.webhook.is_some(),

@@ -84,6 +84,11 @@ pub const OID_IF_OPER_STATUS: &str = "1.3.6.1.2.1.2.2.1.8";
 pub const OID_IF_IN_OCTETS: &str = "1.3.6.1.2.1.2.2.1.10";
 pub const OID_IF_OUT_OCTETS: &str = "1.3.6.1.2.1.2.2.1.16";
 
+// IP address table (for subnet discovery from routers)
+pub const OID_IP_ADDR_ENTRY_ADDR: &str = "1.3.6.1.2.1.4.20.1.1";
+pub const OID_IP_ADDR_ENTRY_MASK: &str = "1.3.6.1.2.1.4.20.1.3";
+pub const OID_IP_ADDR_ENTRY_IF_INDEX: &str = "1.3.6.1.2.1.4.20.1.2";
+
 // LLDP
 pub const OID_LLDP_REM_SYS_NAME: &str = "1.0.8802.1.1.2.1.4.1.1.9";
 pub const OID_LLDP_REM_PORT_ID: &str = "1.0.8802.1.1.2.1.4.1.1.7";

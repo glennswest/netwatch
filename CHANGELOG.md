@@ -26,6 +26,9 @@
 - **feat:** Clear All Alerts button + API endpoint (`DELETE /api/alerts/clear`)
 - **feat:** ARP cache MAC lookup for directly-connected devices
 - **fix:** Existing devices get MAC backfilled on re-scan if missing
+- **feat:** SNMP-based subnet auto-discovery from default gateway (ipAddrTable walk)
+- **feat:** Version number displayed in navigation bar
+- **refactor:** Remove hardcoded subnets from config — all subnets discovered dynamically via SNMP
 
 ### 2026-03-26
 - **feat:** Initial project creation — complete network monitoring app
