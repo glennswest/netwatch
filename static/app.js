@@ -9,7 +9,6 @@ function connectWebSocket() {
     ws = new WebSocket(`${proto}//${location.host}/ws`);
 
     ws.onopen = () => {
-        console.log('WebSocket connected');
         if (wsReconnectTimer) {
             clearTimeout(wsReconnectTimer);
             wsReconnectTimer = null;
@@ -20,31 +19,20 @@ function connectWebSocket() {
         try {
             const msg = JSON.parse(event.data);
             handleWsMessage(msg);
-        } catch (e) {
-            console.warn('WS parse error:', e);
-        }
+        } catch (e) {}
     };
 
     ws.onclose = () => {
-        console.log('WebSocket disconnected, reconnecting...');
-        wsReconnectTimer = setTimeout(connectWebSocket, 3000);
+        wsReconnectTimer = setTimeout(connectWebSocket, 5000);
     };
 
-    ws.onerror = () => {
-        ws.close();
-    };
+    ws.onerror = () => { ws.close(); };
 }
 
 function handleWsMessage(msg) {
     switch (msg.event) {
         case 'alert':
             showToast(msg.message, msg.severity === 'critical' ? 'error' : 'info');
-            break;
-        case 'device_discovered':
-            showToast(`New device discovered: ${msg.ip}`, 'success');
-            break;
-        case 'probe':
-            // Could update specific device status indicators
             break;
         case 'discovery_complete':
             showToast('Discovery scan complete', 'info');
@@ -77,29 +65,46 @@ document.addEventListener('htmx:afterRequest', (event) => {
 });
 
 document.addEventListener('htmx:afterSwap', (event) => {
-    // Success feedback for POST/PUT/DELETE
     const method = event.detail.requestConfig?.verb;
     if (method === 'post' || method === 'put' || method === 'delete') {
         if (!event.detail.failed) {
             showToast('Operation successful', 'success');
         }
     }
+    // Re-apply sort state after HTMX table refresh
+    reapplySorts();
 });
 
 // ── Table sorting ──
 
+// Track sort state per content container
+const sortState = {};
+
 function sortTable(th) {
     const table = th.closest('table');
+    const section = table.closest('details');
     const tbody = table.querySelector('tbody');
     const rows = Array.from(tbody.querySelectorAll('tr'));
     const colIdx = Array.from(th.parentNode.children).indexOf(th);
     const sortType = th.dataset.sort || 'text';
     const asc = th.classList.contains('sort-asc');
+    const dir = asc ? 'desc' : 'asc';
 
     // Clear sort indicators from sibling headers
     th.parentNode.querySelectorAll('th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
-    th.classList.add(asc ? 'sort-desc' : 'sort-asc');
+    th.classList.add('sort-' + dir);
 
+    // Save state keyed by network section name
+    const sectionName = section ? section.querySelector('.network-name')?.textContent.trim() : '_global';
+    const contentDiv = th.closest('[id]');
+    const pageKey = contentDiv ? contentDiv.id : location.pathname;
+    sortState[pageKey] = sortState[pageKey] || {};
+    sortState[pageKey][sectionName] = { colIdx, sortType, dir };
+
+    doSort(tbody, rows, colIdx, sortType, dir);
+}
+
+function doSort(tbody, rows, colIdx, sortType, dir) {
     rows.sort((a, b) => {
         const aText = a.children[colIdx]?.textContent.trim() || '';
         const bText = b.children[colIdx]?.textContent.trim() || '';
@@ -112,10 +117,32 @@ function sortTable(th) {
         } else {
             cmp = aText.localeCompare(bText, undefined, { sensitivity: 'base' });
         }
-        return asc ? -cmp : cmp;
+        return dir === 'asc' ? cmp : -cmp;
     });
-
     rows.forEach(r => tbody.appendChild(r));
+}
+
+function reapplySorts() {
+    for (const [pageKey, sections] of Object.entries(sortState)) {
+        for (const [sectionName, state] of Object.entries(sections)) {
+            // Find the matching table
+            document.querySelectorAll('details.network-section, .table-wrap').forEach(el => {
+                const name = el.querySelector('.network-name')?.textContent.trim() || '_global';
+                if (name !== sectionName) return;
+                const table = el.querySelector('table');
+                if (!table) return;
+                const tbody = table.querySelector('tbody');
+                const rows = Array.from(tbody.querySelectorAll('tr'));
+                const ths = table.querySelectorAll('thead th');
+
+                // Set visual indicator
+                ths.forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+                if (ths[state.colIdx]) ths[state.colIdx].classList.add('sort-' + state.dir);
+
+                doSort(tbody, rows, state.colIdx, state.sortType, state.dir);
+            });
+        }
+    }
 }
 
 function compareIp(a, b) {

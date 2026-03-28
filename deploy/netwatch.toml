@@ -3,7 +3,7 @@ listen = "0.0.0.0:80"
 data_dir = "/data"
 
 [discovery]
-interval_secs = 300
+interval_secs = 900
 snmp_community = "public"
 snmp_timeout_ms = 2000
 auto_add_services = true
@@ -12,7 +12,7 @@ scan_ports = [22, 23, 53, 80, 161, 443, 8080, 8291, 8728, 8729]
 [monitoring]
 default_interval_secs = 60
 default_timeout_ms = 5000
-concurrency = 50
+concurrency = 20
 
 [alerting]
 cooldown_secs = 300
@@ -24,13 +24,18 @@ metric_days = 90
 alert_days = 180
 
 [[subnets]]
-name = "gt"
-cidr = "192.168.200.0/24"
+name = "g1"
+cidr = "192.168.1.0/24"
 snmp_community = "public"
 
 [[subnets]]
-name = "gw"
-cidr = "192.168.1.0/24"
+name = "g8"
+cidr = "192.168.8.0/24"
+snmp_community = "public"
+
+[[subnets]]
+name = "g9"
+cidr = "192.168.9.0/24"
 snmp_community = "public"
 
 [[subnets]]
@@ -41,4 +46,9 @@ snmp_community = "public"
 [[subnets]]
 name = "g11"
 cidr = "192.168.11.0/24"
+snmp_community = "public"
+
+[[subnets]]
+name = "gt"
+cidr = "192.168.200.0/24"
 snmp_community = "public"

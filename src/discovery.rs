@@ -114,13 +114,14 @@ async fn scan_subnet(
         found += 1;
 
         // Check if device already exists
-        if db.get_device_by_ip(&ip_str)?.is_some() {
-            // Update last_seen
-            if let Some(old) = db.get_device_by_ip(&ip_str)? {
-                let mut new = old.clone();
-                new.last_seen = Some(chrono::Utc::now().to_rfc3339());
-                let _ = db.update_device(old, new);
+        if let Some(old) = db.get_device_by_ip(&ip_str)? {
+            let mut new = old.clone();
+            new.last_seen = Some(chrono::Utc::now().to_rfc3339());
+            // Fill in MAC from ARP if missing
+            if new.mac.is_none() {
+                new.mac = arp_lookup(&ip_str);
             }
+            let _ = db.update_device(old, new);
             continue;
         }
 
@@ -151,6 +152,9 @@ async fn scan_subnet(
             }
         }
 
+        // Try to get MAC from ARP cache
+        let mac = arp_lookup(&ip_str);
+
         // Try reverse DNS
         if name == ip_str {
             if let Ok(hostname) = dns_reverse(&ip_str) {
@@ -163,7 +167,7 @@ async fn scan_subnet(
             id: uuid::Uuid::new_v4().to_string(),
             ip: ip_str.clone(),
             name,
-            mac: None,
+            mac,
             vendor,
             device_type,
             snmp_community: Some(comm.clone()),
@@ -280,6 +284,49 @@ async fn fetch_interfaces(
             out_octets: None,
         };
         let _ = db.upsert_interface(iface);
+    }
+
+    // Fetch MAC addresses (ifPhysAddress)
+    let mut first_mac: Option<String> = None;
+    if let Ok(macs) = snmp::async_snmp_walk(
+        ip.to_string(),
+        community.to_string(),
+        snmp::OID_IF_PHYS_ADDR.to_string(),
+        timeout,
+    )
+    .await
+    {
+        for (oid, val) in macs {
+            let if_index: i32 = oid.rsplit('.').next().and_then(|s| s.parse().ok()).unwrap_or(0);
+            let id = format!("{}:{}", device_id, if_index);
+            if let snmp::SnmpValue::OctetString(ref bytes) = val {
+                if bytes.len() == 6 && bytes.iter().any(|&b| b != 0) {
+                    let mac_str = format!(
+                        "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
+                    );
+                    if first_mac.is_none() {
+                        first_mac = Some(mac_str.clone());
+                    }
+                    if let Ok(Some(old)) = db.get_interface(&id) {
+                        let mut new = old.clone();
+                        new.mac = Some(mac_str);
+                        let _ = db.upsert_interface(new);
+                    }
+                }
+            }
+        }
+    }
+
+    // Set device MAC to first real interface MAC found
+    if let Some(mac) = first_mac {
+        if let Ok(Some(old_dev)) = db.get_device(device_id) {
+            if old_dev.mac.is_none() {
+                let mut new_dev = old_dev.clone();
+                new_dev.mac = Some(mac);
+                let _ = db.update_device(old_dev, new_dev);
+            }
+        }
     }
 
     // Fetch speeds
@@ -525,6 +572,21 @@ pub async fn scan_ports_fast(ip: &str, ports: &[u16], timeout_ms: u64) -> Vec<u1
         }
     }
     open
+}
+
+/// Look up MAC address from the local ARP cache (/proc/net/arp).
+fn arp_lookup(ip: &str) -> Option<String> {
+    let arp = std::fs::read_to_string("/proc/net/arp").ok()?;
+    for line in arp.lines().skip(1) {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() >= 4 && fields[0] == ip {
+            let mac = fields[3].to_uppercase();
+            if mac != "00:00:00:00:00:00" {
+                return Some(mac);
+            }
+        }
+    }
+    None
 }
 
 /// Reverse DNS lookup.

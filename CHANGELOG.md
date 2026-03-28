@@ -12,6 +12,13 @@
 - **feat:** Sortable table columns — click headers to sort by status, name, IP, type, latency
 - **feat:** Default sort by IP address (numeric octets) within each network group
 - **fix:** Reduce WebSocket noise — only broadcast probe events for Down/Degraded status changes
+- **feat:** Add g1, g8, g9 subnets (renamed gw to g1); now covers g1/g8/g9/g10/g11/gt
+- **feat:** MAC address discovery via SNMP ifPhysAddress + ARP cache lookup
+- **feat:** MAC column in devices table
+- **feat:** Sortable table headers persist across HTMX auto-refresh
+- **fix:** Suppress device_discovered and probe toast spam — only show alerts and discovery_complete
+- **fix:** Force rust_embed to pick up updated static assets (sorting CSS/JS)
+- **perf:** Discovery interval 300s→900s, monitoring concurrency 50→20 to reduce ping storms
 
 ### 2026-03-26
 - **feat:** Initial project creation — complete network monitoring app

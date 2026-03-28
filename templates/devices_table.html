@@ -16,6 +16,7 @@
                     <th class="sortable" data-sort="text" onclick="sortTable(this)">Status</th>
                     <th class="sortable" data-sort="text" onclick="sortTable(this)">Name</th>
                     <th class="sortable" data-sort="ip" onclick="sortTable(this)">IP</th>
+                    <th class="sortable" data-sort="text" onclick="sortTable(this)">MAC</th>
                     <th class="sortable" data-sort="text" onclick="sortTable(this)">Type</th>
                     <th class="sortable" data-sort="text" onclick="sortTable(this)">Vendor</th>
                     <th>Services</th>
@@ -29,6 +30,7 @@
                     <td><span class="badge {{ d.status.badge_class() }}">{{ d.status.as_str() }}</span></td>
                     <td><a href="/ui/devices/{{ d.device.id }}">{{ d.device.name }}</a></td>
                     <td class="mono">{{ d.device.ip }}</td>
+                    <td class="mono">{% match d.device.mac %}{% when Some with (m) %}{{ m }}{% when None %}-{% endmatch %}</td>
                     <td>{{ d.device.device_type.as_str() }}</td>
                     <td>{% match d.device.vendor %}{% when Some with (v) %}{{ v }}{% when None %}-{% endmatch %}</td>
                     <td>{{ d.services_up }}/{{ d.services_total }}</td>
