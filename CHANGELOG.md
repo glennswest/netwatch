@@ -2,17 +2,26 @@
 
 ## [Unreleased]
 
-### 2026-03-27
-- **feat:** Infrastructure page (`/ui/infrastructure`) — shows SNMP status for routers, switches, APs, firewalls, servers
-- **feat:** SNMP reachability tracking — `snmp_reachable` and `snmp_last_checked` fields on Device
-- **feat:** On-demand SNMP probe API (`POST /api/devices/{id}/snmp-probe`)
-- **feat:** Vendor-specific SNMP enable commands (MikroTik, Cisco, Ubiquiti, Juniper, HPE/Aruba, Fortinet, Linux)
-- **feat:** `DeviceType::is_infrastructure()` helper method
-- **feat:** Discovery sets SNMP reachability on both new and re-scanned devices
-- **fix:** Skip network (.0) and broadcast (.255) addresses during subnet scan
-- **feat:** Per-network DNS discovery — probes common IPs for port 53 on each subnet
-- **feat:** Custom DNS PTR client (`src/dns.rs`) — raw UDP queries, compression pointer support
-- **feat:** Per-network PTR lookups — uses discovered DNS servers before system resolver
+## [v0.3.0] — 2026-03-27
+
+### Added
+- Infrastructure page (`/ui/infrastructure`) — SNMP status for routers, switches, APs, firewalls, servers
+- SNMP reachability tracking (`snmp_reachable`, `snmp_last_checked` fields)
+- On-demand SNMP probe API (`POST /api/devices/{id}/snmp-probe`)
+- Vendor-specific SNMP enable commands (MikroTik, Cisco, Ubiquiti, Juniper, HPE/Aruba, Fortinet, Linux)
+- Per-network DNS discovery — probes common IPs for port 53 on each subnet
+- Custom DNS PTR client (`src/dns.rs`) — raw UDP queries with compression pointer support
+- Per-network PTR lookups — uses discovered DNS servers before system resolver
+- Multi-homed device consolidation — devices with same SNMP sysName share one record
+- `additional_ips` field for multi-homed devices (e.g. rose1 MikroTik bridges)
+- `dns_servers` field on Subnet — auto-discovered DNS servers per network
+- SVG device icons on network map (router, switch, server, firewall, AP, printer, camera, phone)
+- Multi-homed devices rendered larger on map with port dots and all IPs listed
+- Discovery page shows discovered DNS servers per subnet
+- Device detail and device table show additional IPs
+
+### Fixed
+- Skip network (.0) and broadcast (.255) addresses during subnet scan
 - **feat:** Multi-homed device consolidation — devices with same SNMP sysName share one record
 - **feat:** `additional_ips` field on Device for multi-homed devices (rose1 bridges)
 - **feat:** `dns_servers` field on Subnet — auto-discovered DNS servers per network
