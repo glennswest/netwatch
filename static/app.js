@@ -73,7 +73,6 @@ document.addEventListener('htmx:afterSwap', (event) => {
     }
     // Re-apply sort state after HTMX table refresh
     reapplySorts();
-    reapplyNetworkFilter();
 });
 
 // ── Table sorting ──
@@ -160,33 +159,7 @@ function parseNum(s) {
     return isNaN(n) ? -1 : n;
 }
 
-// ── Network filter ──
-
-function filterNetworks(value) {
-    document.querySelectorAll('details.network-section').forEach(section => {
-        const name = section.querySelector('.network-name')?.textContent.trim();
-        if (value === 'all' || name === value) {
-            section.style.display = '';
-        } else {
-            section.style.display = 'none';
-        }
-    });
-    // Persist selection
-    sessionStorage.setItem('network-filter', value);
-}
-
-// Re-apply filter after HTMX refresh
-function reapplyNetworkFilter() {
-    const saved = sessionStorage.getItem('network-filter');
-    if (saved && saved !== 'all') {
-        const select = document.getElementById('network-filter');
-        if (select) select.value = saved;
-        filterNetworks(saved);
-    }
-}
-
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();
-    reapplyNetworkFilter();
 });
