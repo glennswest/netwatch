@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 2026-03-28
+- **fix:** Ping sweep connected sockets — each ping uses connect() to filter replies to target IP only
+- **fix:** ICMP reply handling — retry loop handles destination-unreachable (type 3) and skips non-matching responses
+- **fix:** Proper IP header offset detection for DGRAM vs RAW ICMP sockets
+- **fix:** Run initial subnet scan immediately on startup instead of waiting 15 minutes
+- **fix:** Skip non-RFC1918 networks from ping sweep (was scanning public 24.158.x.x/22)
+
 ## [v0.3.0] — 2026-03-27
 
 ### Added

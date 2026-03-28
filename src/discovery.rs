@@ -25,15 +25,19 @@ pub async fn run(
         tracing::warn!("discovery: gateway subnet discovery failed: {}", e);
     }
 
-    let mut interval =
-        tokio::time::interval(Duration::from_secs(config.discovery.interval_secs));
+    let interval_secs = config.discovery.interval_secs;
+    let mut first_run = true;
 
     loop {
-        interval.tick().await;
-
-        // Re-discover subnets from gateway each cycle
-        if let Err(e) = discover_gateway_subnets(&db, &config).await {
-            tracing::warn!("discovery: gateway subnet discovery failed: {}", e);
+        if first_run {
+            first_run = false;
+            tracing::info!("discovery: running initial scan of all subnets");
+        } else {
+            tokio::time::sleep(Duration::from_secs(interval_secs)).await;
+            // Re-discover subnets from gateway each cycle
+            if let Err(e) = discover_gateway_subnets(&db, &config).await {
+                tracing::warn!("discovery: gateway subnet discovery failed: {}", e);
+            }
         }
 
         let subnets = match db.list_subnets() {
@@ -114,8 +118,19 @@ pub async fn discover_gateway_subnets(db: &Db, config: &Config) -> Result<()> {
     for (oid, val) in &addrs {
         let ip_str = val.as_string();
 
-        // Skip loopback and link-local
+        // Skip loopback, link-local, and non-private networks
         if ip_str.starts_with("127.") || ip_str.starts_with("169.254.") {
+            continue;
+        }
+        // Only scan RFC1918 private networks
+        if !ip_str.starts_with("10.")
+            && !ip_str.starts_with("172.16.") && !ip_str.starts_with("172.17.")
+            && !ip_str.starts_with("172.18.") && !ip_str.starts_with("172.19.")
+            && !ip_str.starts_with("172.2") && !ip_str.starts_with("172.30.")
+            && !ip_str.starts_with("172.31.")
+            && !ip_str.starts_with("192.168.")
+        {
+            tracing::debug!("discovery: skipping non-private subnet for {}", ip_str);
             continue;
         }
 
@@ -693,15 +708,20 @@ pub fn ping_host_sync(ip: &str, timeout_ms: u64) -> bool {
         Err(_) => return false,
     };
 
+    let target_v4: Ipv4Addr = match ip.parse() {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+
     // Try DGRAM ICMP first (unprivileged), then RAW, then TCP fallback
     let raw_type = Type::from(libc::SOCK_RAW);
     let dgram_type = Type::DGRAM;
     let icmp_proto = Protocol::ICMPV4;
 
-    let sock = match Socket::new(Domain::IPV4, dgram_type, Some(icmp_proto)) {
-        Ok(s) => s,
+    let (sock, is_dgram) = match Socket::new(Domain::IPV4, dgram_type, Some(icmp_proto)) {
+        Ok(s) => (s, true),
         Err(_) => match Socket::new(Domain::IPV4, raw_type, Some(icmp_proto)) {
-            Ok(s) => s,
+            Ok(s) => (s, false),
             Err(_) => {
                 return tcp_probe_sync(ip, 80, timeout_ms)
                     || tcp_probe_sync(ip, 443, timeout_ms)
@@ -713,11 +733,13 @@ pub fn ping_host_sync(ip: &str, timeout_ms: u64) -> bool {
     sock.set_read_timeout(Some(Duration::from_millis(timeout_ms))).ok();
     sock.set_write_timeout(Some(Duration::from_millis(timeout_ms))).ok();
 
+    // Connect to target so recv only gets replies from this IP
     let dest: SockAddr = SocketAddr::new(addr, 0).into();
+    let _ = sock.connect(&dest);
 
     // Build ICMP echo request
     let id = (std::process::id() & 0xFFFF) as u16;
-    let seq = 1u16;
+    let seq: u16 = (target_v4.octets()[2] as u16) << 8 | target_v4.octets()[3] as u16;
     let mut packet = vec![
         8, 0, 0, 0, // type=echo, code=0, checksum placeholder
         (id >> 8) as u8, (id & 0xFF) as u8,
@@ -729,23 +751,47 @@ pub fn ping_host_sync(ip: &str, timeout_ms: u64) -> bool {
     packet[2] = (cksum >> 8) as u8;
     packet[3] = (cksum & 0xFF) as u8;
 
-    if sock.send_to(&packet, &dest).is_err() {
+    if sock.send(&packet).is_err() {
         return false;
     }
 
-    let mut buf = [MaybeUninit::<u8>::uninit(); 256];
-    match sock.recv(&mut buf) {
-        Ok(n) if n >= 8 => {
-            // SAFETY: recv filled `n` bytes
-            let data: Vec<u8> = buf[..n].iter().map(|b| unsafe { b.assume_init() }).collect();
-            // Check for echo reply (type 0)
-            let offset = if data[0] >> 4 == 4 { 20 } else { 0 };
-            if offset < n && data[offset] == 0 {
-                return true;
-            }
-            data[0] == 0
+    // Read responses — retry a few times to skip error responses
+    let deadline = std::time::Instant::now() + Duration::from_millis(timeout_ms);
+    let mut buf = [MaybeUninit::<u8>::uninit(); 512];
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return false;
         }
-        _ => false,
+        sock.set_read_timeout(Some(remaining)).ok();
+
+        match sock.recv(&mut buf) {
+            Ok(n) if n >= 4 => {
+                let data: Vec<u8> = buf[..n].iter().map(|b| unsafe { b.assume_init() }).collect();
+
+                // DGRAM sockets strip IP header; RAW sockets include it
+                let offset = if !is_dgram && data[0] >> 4 == 4 {
+                    ((data[0] & 0x0F) as usize) * 4
+                } else {
+                    0
+                };
+
+                if offset >= n { return false; }
+                let icmp_type = data[offset];
+
+                // Type 0 = echo reply — success
+                if icmp_type == 0 {
+                    return true;
+                }
+                // Type 3 = destination unreachable — host doesn't exist
+                if icmp_type == 3 {
+                    return false;
+                }
+                // Other ICMP type — keep waiting for echo reply
+                continue;
+            }
+            _ => return false,
+        }
     }
 }
 
