@@ -6,7 +6,7 @@ use crate::models::*;
 use crate::snmp;
 use anyhow::Result;
 use ipnetwork::IpNetwork;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
@@ -240,6 +240,26 @@ async fn scan_subnet(
         _ => return Ok(0),
     };
 
+    // DNS server discovery — probe common IPs for port 53
+    let dns_servers = {
+        let mut found_dns: Vec<String> = Vec::new();
+        if let IpNetwork::V4(net) = network {
+            let base = net.network().octets();
+            let candidates = [1, 199, 252, 253];
+            for last in candidates {
+                let candidate = format!("{}.{}.{}.{}", base[0], base[1], base[2], last);
+                if crate::dns::async_probe_dns_server(candidate.clone(), 1500).await {
+                    tracing::info!("discovery: found DNS server {} on {}", candidate, subnet.cidr);
+                    found_dns.push(candidate);
+                }
+            }
+        }
+        if !found_dns.is_empty() {
+            let _ = db.update_subnet_dns_servers(&subnet.id, found_dns.clone());
+        }
+        found_dns
+    };
+
     // Ping sweep in parallel batches
     let semaphore = Arc::new(tokio::sync::Semaphore::new(100));
     let mut handles = Vec::new();
@@ -265,8 +285,8 @@ async fn scan_subnet(
 
         found += 1;
 
-        // Check if device already exists
-        if let Some(old) = db.get_device_by_ip(&ip_str)? {
+        // Check if device already exists (primary or additional IP)
+        if let Some(old) = db.get_device_by_any_ip(&ip_str)? {
             let mut new = old.clone();
             new.last_seen = Some(chrono::Utc::now().to_rfc3339());
             // Fill in MAC from ARP if missing
@@ -311,6 +331,34 @@ async fn scan_subnet(
             }
         }
 
+        // Multi-homed consolidation: if SNMP sysName matches an existing device,
+        // add this IP as an additional_ip instead of creating a new device
+        if snmp_reachable && name != ip_str {
+            if let Ok(Some(existing)) = db.get_device_by_name(&name) {
+                if existing.ip != ip_str && !existing.additional_ips.contains(&ip_str) {
+                    let mut updated = existing.clone();
+                    updated.additional_ips.push(ip_str.clone());
+                    updated.last_seen = Some(chrono::Utc::now().to_rfc3339());
+                    updated.snmp_reachable = Some(true);
+                    updated.snmp_last_checked = Some(chrono::Utc::now().to_rfc3339());
+                    let _ = db.update_device(existing, updated);
+                    tracing::info!(
+                        "discovery: consolidated {} as additional IP on {}",
+                        ip_str, name
+                    );
+                    // Fetch interfaces for the additional IP
+                    if let Ok(Some(dev)) = db.get_device_by_name(&name) {
+                        let _ = fetch_interfaces(db, &dev.id, &ip_str, &comm, timeout).await;
+                    }
+                    let _ = ws_tx.send(format!(
+                        r#"{{"event":"device_consolidated","ip":"{}","name":"{}"}}"#,
+                        ip_str, name
+                    ));
+                    continue;
+                }
+            }
+        }
+
         // Try to get MAC from ARP cache
         let mac = arp_lookup(&ip_str);
 
@@ -324,17 +372,14 @@ async fn scan_subnet(
             }
         }
 
-        // Try reverse DNS
+        // Try per-network DNS first, fall back to system resolver
         if name == ip_str {
-            if let Ok(hostname) = dns_reverse(&ip_str) {
+            if let Some(hostname) = crate::dns::resolve_ptr(&ip_str, &dns_servers, 2000).await {
                 name = hostname;
             }
         }
 
-        let is_infrastructure = matches!(
-            device_type,
-            DeviceType::Router | DeviceType::Switch | DeviceType::Firewall | DeviceType::Ap | DeviceType::Server
-        );
+        let is_infrastructure = device_type.is_infrastructure();
 
         let mut labels = std::collections::HashMap::new();
         if !is_infrastructure {
@@ -855,18 +900,6 @@ fn arp_lookup(ip: &str) -> Option<String> {
         }
     }
     None
-}
-
-/// Reverse DNS lookup.
-fn dns_reverse(ip: &str) -> Result<String> {
-    let addr: IpAddr = ip.parse()?;
-    let sa: SocketAddr = SocketAddr::new(addr, 0);
-    let hostname = dns_lookup::lookup_addr(&sa.ip())?;
-    if hostname != ip {
-        Ok(hostname)
-    } else {
-        anyhow::bail!("no reverse DNS")
-    }
 }
 
 /// Map a port number to a service name and probe type.
