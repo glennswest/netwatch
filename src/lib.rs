@@ -1,6 +1,7 @@
 pub mod models;
 pub mod config;
 pub mod db;
+pub mod dns;
 pub mod snmp;
 pub mod discovery;
 pub mod monitor;

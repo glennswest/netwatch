@@ -349,6 +349,7 @@ async fn scan_subnet(
         let device = Device {
             id: uuid::Uuid::new_v4().to_string(),
             ip: ip_str.clone(),
+            additional_ips: Vec::new(),
             name,
             mac,
             vendor,

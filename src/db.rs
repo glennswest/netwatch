@@ -128,6 +128,18 @@ impl Db {
         Ok(devices.into_iter().find(|d| d.ip == ip))
     }
 
+    pub fn get_device_by_any_ip(&self, ip: &str) -> Result<Option<Device>> {
+        let devices = self.list_devices()?;
+        Ok(devices.into_iter().find(|d| {
+            d.ip == ip || d.additional_ips.iter().any(|a| a == ip)
+        }))
+    }
+
+    pub fn get_device_by_name(&self, name: &str) -> Result<Option<Device>> {
+        let devices = self.list_devices()?;
+        Ok(devices.into_iter().find(|d| d.name == name))
+    }
+
     pub fn insert_device(&self, device: Device) -> Result<()> {
         self.put(DEVICES, &device.id, &device)
     }
@@ -349,6 +361,7 @@ impl Db {
                 snmp_community: community.to_string(),
                 scan_enabled: true,
                 last_scan: None,
+                dns_servers: Vec::new(),
             };
             self.insert_subnet(subnet)?;
         }
@@ -358,6 +371,14 @@ impl Db {
     pub fn update_subnet_last_scan(&self, id: &str, time: &str) -> Result<()> {
         if let Some(mut subnet) = self.get_one::<Subnet>(SUBNETS, id)? {
             subnet.last_scan = Some(time.to_string());
+            self.put(SUBNETS, id, &subnet)?;
+        }
+        Ok(())
+    }
+
+    pub fn update_subnet_dns_servers(&self, id: &str, servers: Vec<String>) -> Result<()> {
+        if let Some(mut subnet) = self.get_one::<Subnet>(SUBNETS, id)? {
+            subnet.dns_servers = servers;
             self.put(SUBNETS, id, &subnet)?;
         }
         Ok(())

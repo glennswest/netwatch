@@ -218,6 +218,8 @@ impl std::fmt::Display for Severity {
 pub struct Device {
     pub id: String,
     pub ip: String,
+    #[serde(default)]
+    pub additional_ips: Vec<String>,
     pub name: String,
     pub mac: Option<String>,
     pub vendor: Option<String>,
@@ -309,6 +311,8 @@ pub struct Subnet {
     pub snmp_community: String,
     pub scan_enabled: bool,
     pub last_scan: Option<String>,
+    #[serde(default)]
+    pub dns_servers: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -367,6 +371,16 @@ pub struct NetworkGroup {
 impl NetworkGroup {
     pub fn device_count(&self) -> usize {
         self.devices.len()
+    }
+}
+
+impl Device {
+    pub fn all_ips(&self) -> Vec<&str> {
+        let mut ips = vec![self.ip.as_str()];
+        for ip in &self.additional_ips {
+            ips.push(ip.as_str());
+        }
+        ips
     }
 }
 

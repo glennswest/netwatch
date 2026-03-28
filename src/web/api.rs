@@ -38,6 +38,7 @@ pub async fn create_device(
     let device = Device {
         id: uuid::Uuid::new_v4().to_string(),
         ip: req.ip,
+        additional_ips: Vec::new(),
         name: req.name,
         mac: req.mac,
         vendor: None,
@@ -320,6 +321,7 @@ pub async fn create_subnet(
         snmp_community: req.snmp_community.unwrap_or_else(|| "public".into()),
         scan_enabled: true,
         last_scan: None,
+        dns_servers: Vec::new(),
     };
 
     match state.db.insert_subnet(subnet.clone()) {
