@@ -10,6 +10,16 @@
 - **feat:** `DeviceType::is_infrastructure()` helper method
 - **feat:** Discovery sets SNMP reachability on both new and re-scanned devices
 - **fix:** Skip network (.0) and broadcast (.255) addresses during subnet scan
+- **feat:** Per-network DNS discovery — probes common IPs for port 53 on each subnet
+- **feat:** Custom DNS PTR client (`src/dns.rs`) — raw UDP queries, compression pointer support
+- **feat:** Per-network PTR lookups — uses discovered DNS servers before system resolver
+- **feat:** Multi-homed device consolidation — devices with same SNMP sysName share one record
+- **feat:** `additional_ips` field on Device for multi-homed devices (rose1 bridges)
+- **feat:** `dns_servers` field on Subnet — auto-discovered DNS servers per network
+- **feat:** SVG device icons on network map (router, switch, server, firewall, AP, printer, camera, phone)
+- **feat:** Multi-homed devices shown larger on map with port dots and all IPs listed
+- **feat:** Discovery page shows discovered DNS servers per subnet
+- **feat:** Device detail and device table show additional IPs for multi-homed devices
 
 ## [v0.2.0] — 2026-03-27
 

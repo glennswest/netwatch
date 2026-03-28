@@ -13,6 +13,13 @@
     <div class="card">
         <div class="card-label">IP Address</div>
         <div class="card-value" style="font-size: 1.2rem; font-family: var(--font-mono);">{{ device.ip }}</div>
+        {% if !device.additional_ips.is_empty() %}
+        <div class="card-sub">
+            {% for ip in device.additional_ips %}
+            <span class="mono" style="display:block; font-size:0.85rem; color: var(--text-muted);">{{ ip }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
     <div class="card">
         <div class="card-label">Type</div>

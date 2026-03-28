@@ -75,7 +75,7 @@
                 <tr>
                     <td><span class="badge {{ d.status.badge_class() }}">{{ d.status.as_str() }}</span></td>
                     <td><a href="/ui/devices/{{ d.device.id }}">{{ d.device.name }}</a></td>
-                    <td class="mono">{{ d.device.ip }}</td>
+                    <td class="mono">{{ d.device.ip }}{% for ip in d.device.additional_ips %}<br><span style="font-size:0.8em;opacity:0.6">{{ ip }}</span>{% endfor %}</td>
                     <td class="mono">{% match d.device.mac %}{% when Some with (m) %}{{ m }}{% when None %}-{% endmatch %}</td>
                     <td>{{ d.device.device_type.as_str() }}</td>
                     <td>{% match d.device.vendor %}{% when Some with (v) %}{{ v }}{% when None %}-{% endmatch %}</td>

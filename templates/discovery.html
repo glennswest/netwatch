@@ -37,6 +37,7 @@
                 <th>Name</th>
                 <th>CIDR</th>
                 <th>Community</th>
+                <th>DNS</th>
                 <th>Enabled</th>
                 <th>Last Scan</th>
                 <th>Actions</th>
@@ -44,13 +45,14 @@
         </thead>
         <tbody id="subnet-table-body">
             {% if subnets.is_empty() %}
-            <tr class="empty-row"><td colspan="6">No subnets configured — add one above to start discovery</td></tr>
+            <tr class="empty-row"><td colspan="7">No subnets configured — add one above to start discovery</td></tr>
             {% else %}
             {% for s in subnets %}
             <tr>
                 <td>{{ s.name }}</td>
                 <td class="mono">{{ s.cidr }}</td>
                 <td class="mono">{{ s.snmp_community }}</td>
+                <td class="mono">{% if s.dns_servers.is_empty() %}<span class="text-muted">none</span>{% else %}{% for dns in s.dns_servers %}{{ dns }}{% if !loop.last %}<br>{% endif %}{% endfor %}{% endif %}</td>
                 <td>{% if s.scan_enabled %}<span class="badge badge-success">yes</span>{% else %}<span class="badge badge-info">no</span>{% endif %}</td>
                 <td class="mono">{% match s.last_scan %}{% when Some with (t) %}{{ t }}{% when None %}never{% endmatch %}</td>
                 <td>

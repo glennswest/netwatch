@@ -471,6 +471,7 @@ pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
             "id": ds.device.id,
             "name": ds.device.name,
             "ip": ds.device.ip,
+            "additional_ips": ds.device.additional_ips,
             "type": ds.device.device_type.as_str(),
             "status": ds.status.as_str(),
             "icon_letter": ds.device.device_type.icon_letter(),
