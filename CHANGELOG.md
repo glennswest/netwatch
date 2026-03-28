@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 2026-03-27
+- **fix:** Web UI hang — `get_latest_probe()` scanned entire probes table per service per device (O(N*M*P))
+- **fix:** Add `LATEST_PROBES` redb table for O(1) latest-probe-per-service lookup
+- **fix:** Wrap all blocking redb calls in `spawn_blocking` to prevent async runtime starvation
+- **perf:** Dashboard, devices, map, services, alerts pages now respond instantly instead of hanging
+
 ### 2026-03-26
 - **feat:** Initial project creation — complete network monitoring app
 - **feat:** Auto-discovery engine (ICMP ping sweep, port scan, SNMP system info)

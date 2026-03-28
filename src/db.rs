@@ -15,6 +15,7 @@ const SUBNETS: TableDefinition<&str, &[u8]> = TableDefinition::new("subnets");
 const POSITIONS: TableDefinition<&str, &[u8]> = TableDefinition::new("positions");
 const METRICS: TableDefinition<&str, &[u8]> = TableDefinition::new("metrics");
 const ALERT_RULES: TableDefinition<&str, &[u8]> = TableDefinition::new("alert_rules");
+const LATEST_PROBES: TableDefinition<&str, &[u8]> = TableDefinition::new("latest_probes");
 
 pub struct Db {
     inner: Database,
@@ -35,6 +36,7 @@ impl Db {
         write.open_table(POSITIONS)?;
         write.open_table(METRICS)?;
         write.open_table(ALERT_RULES)?;
+        write.open_table(LATEST_PROBES)?;
         write.commit()?;
         Ok(Self { inner: db })
     }
@@ -213,7 +215,16 @@ impl Db {
     // ── Probe Results ──
 
     pub fn insert_probe_result(&self, result: ProbeResult) -> Result<()> {
-        self.put(PROBES, &result.id, &result)
+        let json = serde_json::to_vec(&result)?;
+        let write = self.inner.begin_write()?;
+        {
+            let mut probes = write.open_table(PROBES)?;
+            probes.insert(result.id.as_str(), json.as_slice())?;
+            let mut latest = write.open_table(LATEST_PROBES)?;
+            latest.insert(result.service_id.as_str(), json.as_slice())?;
+        }
+        write.commit()?;
+        Ok(())
     }
 
     pub fn list_probe_results(&self, service_id: &str, limit: usize) -> Result<Vec<ProbeResult>> {
@@ -228,8 +239,7 @@ impl Db {
     }
 
     pub fn get_latest_probe(&self, service_id: &str) -> Result<Option<ProbeResult>> {
-        let results = self.list_probe_results(service_id, 1)?;
-        Ok(results.into_iter().next())
+        self.get_one(LATEST_PROBES, service_id)
     }
 
     // ── Alerts ──

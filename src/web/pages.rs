@@ -148,12 +148,12 @@ fn group_services_by_network(
     groups
 }
 
-fn build_service_rows(state: &AppState) -> Vec<ServiceRow> {
-    let all_services = state.db.list_services().unwrap_or_default();
+fn build_service_rows(db: &crate::db::Db) -> Vec<ServiceRow> {
+    let all_services = db.list_services().unwrap_or_default();
     let mut rows = Vec::new();
     for svc in all_services {
-        let device = state.db.get_device(&svc.device_id).ok().flatten();
-        let probe = state.db.get_latest_probe(&svc.id).ok().flatten();
+        let device = db.get_device(&svc.device_id).ok().flatten();
+        let probe = db.get_latest_probe(&svc.id).ok().flatten();
         rows.push(ServiceRow {
             device_name: device.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
             device_ip: device.as_ref().map(|d| d.ip.clone()).unwrap_or_default(),
@@ -193,9 +193,16 @@ struct DashboardTemplate {
 }
 
 pub async fn dashboard(State(state): State<AppState>) -> impl IntoResponse {
-    let statuses = state.db.get_device_statuses().unwrap_or_default();
-    let alerts = state.db.list_active_alerts().unwrap_or_default();
-    let subnets = state.db.list_subnets().unwrap_or_default();
+    let db = state.db.clone();
+    let (statuses, alerts, subnets) = tokio::task::spawn_blocking(move || {
+        (
+            db.get_device_statuses().unwrap_or_default(),
+            db.list_active_alerts().unwrap_or_default(),
+            db.list_subnets().unwrap_or_default(),
+        )
+    })
+    .await
+    .unwrap();
 
     let devices_up = statuses
         .iter()
@@ -241,8 +248,15 @@ struct DevicesTemplate {
 }
 
 pub async fn devices(State(state): State<AppState>) -> impl IntoResponse {
-    let statuses = state.db.get_device_statuses().unwrap_or_default();
-    let subnets = state.db.list_subnets().unwrap_or_default();
+    let db = state.db.clone();
+    let (statuses, subnets) = tokio::task::spawn_blocking(move || {
+        (
+            db.get_device_statuses().unwrap_or_default(),
+            db.list_subnets().unwrap_or_default(),
+        )
+    })
+    .await
+    .unwrap();
     let networks = group_devices_by_network(statuses, &subnets);
     HtmlTemplate(DevicesTemplate {
         active: "devices".into(),
@@ -257,8 +271,15 @@ struct DevicesTableTemplate {
 }
 
 pub async fn devices_table_partial(State(state): State<AppState>) -> impl IntoResponse {
-    let statuses = state.db.get_device_statuses().unwrap_or_default();
-    let subnets = state.db.list_subnets().unwrap_or_default();
+    let db = state.db.clone();
+    let (statuses, subnets) = tokio::task::spawn_blocking(move || {
+        (
+            db.get_device_statuses().unwrap_or_default(),
+            db.list_subnets().unwrap_or_default(),
+        )
+    })
+    .await
+    .unwrap();
     let networks = group_devices_by_network(statuses, &subnets);
     HtmlTemplate(DevicesTableTemplate { networks })
 }
@@ -296,70 +317,80 @@ pub async fn device_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let device = match state.db.get_device(&id) {
-        Ok(Some(d)) => d,
-        _ => return Redirect::to("/ui/devices").into_response(),
-    };
-
-    let interfaces = state
-        .db
-        .list_interfaces_for_device(&id)
-        .unwrap_or_default();
-    let services = state
-        .db
-        .list_services_for_device(&id)
-        .unwrap_or_default();
-
-    let mut svc_statuses = Vec::new();
-    let mut overall_down = false;
-    let mut any_up = false;
-
-    for svc in services {
-        let probe = state.db.get_latest_probe(&svc.id).ok().flatten();
-        let (status, latency, error) = match probe {
-            Some(p) => (p.status, p.latency_us, p.error),
-            None => (ProbeStatus::Unknown, None, None),
+    let db = state.db.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let device = match db.get_device(&id) {
+            Ok(Some(d)) => d,
+            _ => return None,
         };
-        if status == ProbeStatus::Down {
-            overall_down = true;
+
+        let interfaces = db
+            .list_interfaces_for_device(&id)
+            .unwrap_or_default();
+        let services = db
+            .list_services_for_device(&id)
+            .unwrap_or_default();
+
+        let mut svc_statuses = Vec::new();
+        let mut overall_down = false;
+        let mut any_up = false;
+
+        for svc in services {
+            let probe = db.get_latest_probe(&svc.id).ok().flatten();
+            let (status, latency, error) = match probe {
+                Some(p) => (p.status, p.latency_us, p.error),
+                None => (ProbeStatus::Unknown, None, None),
+            };
+            if status == ProbeStatus::Down {
+                overall_down = true;
+            }
+            if status == ProbeStatus::Up {
+                any_up = true;
+            }
+            svc_statuses.push(ServiceWithStatus {
+                service: svc,
+                status,
+                latency_us: latency,
+                last_error: error,
+            });
         }
-        if status == ProbeStatus::Up {
-            any_up = true;
-        }
-        svc_statuses.push(ServiceWithStatus {
-            service: svc,
-            status,
-            latency_us: latency,
-            last_error: error,
-        });
-    }
 
-    let overall_status = if overall_down && !any_up {
-        ProbeStatus::Down
-    } else if overall_down {
-        ProbeStatus::Degraded
-    } else if any_up {
-        ProbeStatus::Up
-    } else {
-        ProbeStatus::Unknown
-    };
+        let overall_status = if overall_down && !any_up {
+            ProbeStatus::Down
+        } else if overall_down {
+            ProbeStatus::Degraded
+        } else if any_up {
+            ProbeStatus::Up
+        } else {
+            ProbeStatus::Unknown
+        };
 
-    let alerts = state.db.list_alerts(20).unwrap_or_default();
-    let device_alerts: Vec<Alert> = alerts
-        .into_iter()
-        .filter(|a| a.device_id == id)
-        .take(10)
-        .collect();
+        let alerts = db.list_alerts(20).unwrap_or_default();
+        let device_alerts: Vec<Alert> = alerts
+            .into_iter()
+            .filter(|a| a.device_id == id)
+            .take(10)
+            .collect();
 
-    HtmlTemplate(DeviceDetailTemplate {
-        active: "devices".into(),
-        device,
-        status: overall_status,
-        interfaces,
-        services: svc_statuses,
-        recent_alerts: device_alerts,
+        Some((device, overall_status, interfaces, svc_statuses, device_alerts))
     })
-    .into_response()
+    .await
+    .unwrap();
+
+    match result {
+        Some((device, status, interfaces, services, recent_alerts)) => {
+            HtmlTemplate(DeviceDetailTemplate {
+                active: "devices".into(),
+                device,
+                status,
+                interfaces,
+                services,
+                recent_alerts,
+            })
+            .into_response()
+        }
+        None => Redirect::to("/ui/devices").into_response(),
+    }
 }
 
 // ── Network Map ──
@@ -373,9 +404,16 @@ struct MapTemplate {
 }
 
 pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
-    let statuses = state.db.get_device_statuses().unwrap_or_default();
-    let links = state.db.list_links().unwrap_or_default();
-    let positions = state.db.list_positions().unwrap_or_default();
+    let db = state.db.clone();
+    let (statuses, links, positions) = tokio::task::spawn_blocking(move || {
+        (
+            db.get_device_statuses().unwrap_or_default(),
+            db.list_links().unwrap_or_default(),
+            db.list_positions().unwrap_or_default(),
+        )
+    })
+    .await
+    .unwrap();
 
     let mut map_devices = Vec::new();
     for ds in &statuses {
@@ -454,8 +492,12 @@ impl ServiceRow {
 }
 
 pub async fn services(State(state): State<AppState>) -> impl IntoResponse {
-    let rows = build_service_rows(&state);
-    let subnets = state.db.list_subnets().unwrap_or_default();
+    let db = state.db.clone();
+    let (rows, subnets) = tokio::task::spawn_blocking(move || {
+        (build_service_rows(&db), db.list_subnets().unwrap_or_default())
+    })
+    .await
+    .unwrap();
     let networks = group_services_by_network(rows, &subnets);
     HtmlTemplate(ServicesTemplate {
         active: "services".into(),
@@ -470,8 +512,12 @@ struct ServicesTableTemplate {
 }
 
 pub async fn services_table_partial(State(state): State<AppState>) -> impl IntoResponse {
-    let rows = build_service_rows(&state);
-    let subnets = state.db.list_subnets().unwrap_or_default();
+    let db = state.db.clone();
+    let (rows, subnets) = tokio::task::spawn_blocking(move || {
+        (build_service_rows(&db), db.list_subnets().unwrap_or_default())
+    })
+    .await
+    .unwrap();
     let networks = group_services_by_network(rows, &subnets);
     HtmlTemplate(ServicesTableTemplate { networks })
 }
@@ -491,17 +537,22 @@ pub struct AlertRow {
 }
 
 pub async fn alerts(State(state): State<AppState>) -> impl IntoResponse {
-    let all_alerts = state.db.list_alerts(200).unwrap_or_default();
-    let mut rows = Vec::new();
-    for alert in all_alerts {
-        let device_name = state
-            .db
-            .get_device(&alert.device_id)
-            .ok()
-            .flatten()
-            .map(|d| d.name);
-        rows.push(AlertRow { alert, device_name });
-    }
+    let db = state.db.clone();
+    let rows = tokio::task::spawn_blocking(move || {
+        let all_alerts = db.list_alerts(200).unwrap_or_default();
+        let mut rows = Vec::new();
+        for alert in all_alerts {
+            let device_name = db
+                .get_device(&alert.device_id)
+                .ok()
+                .flatten()
+                .map(|d| d.name);
+            rows.push(AlertRow { alert, device_name });
+        }
+        rows
+    })
+    .await
+    .unwrap();
     HtmlTemplate(AlertsTemplate {
         active: "alerts".into(),
         alerts: rows,
@@ -515,17 +566,22 @@ struct AlertsTableTemplate {
 }
 
 pub async fn alerts_table_partial(State(state): State<AppState>) -> impl IntoResponse {
-    let all_alerts = state.db.list_alerts(200).unwrap_or_default();
-    let mut rows = Vec::new();
-    for alert in all_alerts {
-        let device_name = state
-            .db
-            .get_device(&alert.device_id)
-            .ok()
-            .flatten()
-            .map(|d| d.name);
-        rows.push(AlertRow { alert, device_name });
-    }
+    let db = state.db.clone();
+    let rows = tokio::task::spawn_blocking(move || {
+        let all_alerts = db.list_alerts(200).unwrap_or_default();
+        let mut rows = Vec::new();
+        for alert in all_alerts {
+            let device_name = db
+                .get_device(&alert.device_id)
+                .ok()
+                .flatten()
+                .map(|d| d.name);
+            rows.push(AlertRow { alert, device_name });
+        }
+        rows
+    })
+    .await
+    .unwrap();
     HtmlTemplate(AlertsTableTemplate { alerts: rows })
 }
 
@@ -539,7 +595,12 @@ struct DiscoveryTemplate {
 }
 
 pub async fn discovery(State(state): State<AppState>) -> impl IntoResponse {
-    let subnets = state.db.list_subnets().unwrap_or_default();
+    let db = state.db.clone();
+    let subnets = tokio::task::spawn_blocking(move || {
+        db.list_subnets().unwrap_or_default()
+    })
+    .await
+    .unwrap();
     HtmlTemplate(DiscoveryTemplate {
         active: "discovery".into(),
         subnets,
@@ -556,7 +617,12 @@ struct PerformanceTemplate {
 }
 
 pub async fn performance(State(state): State<AppState>) -> impl IntoResponse {
-    let devices = state.db.list_devices().unwrap_or_default();
+    let db = state.db.clone();
+    let devices = tokio::task::spawn_blocking(move || {
+        db.list_devices().unwrap_or_default()
+    })
+    .await
+    .unwrap();
     HtmlTemplate(PerformanceTemplate {
         active: "performance".into(),
         devices,
@@ -575,7 +641,12 @@ struct SettingsTemplate {
 }
 
 pub async fn settings(State(state): State<AppState>) -> impl IntoResponse {
-    let rules = state.db.list_alert_rules().unwrap_or_default();
+    let db = state.db.clone();
+    let rules = tokio::task::spawn_blocking(move || {
+        db.list_alert_rules().unwrap_or_default()
+    })
+    .await
+    .unwrap();
     HtmlTemplate(SettingsTemplate {
         active: "settings".into(),
         rules,

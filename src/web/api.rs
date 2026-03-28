@@ -12,7 +12,8 @@ use axum::{
 // ── Devices ──
 
 pub async fn list_devices(State(state): State<AppState>) -> impl IntoResponse {
-    match state.db.get_device_statuses() {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db.get_device_statuses()).await.unwrap() {
         Ok(statuses) => Json(statuses).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
@@ -106,7 +107,8 @@ pub async fn delete_device(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match state.db.delete_device_cascade(&id) {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db.delete_device_cascade(&id)).await.unwrap() {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
@@ -229,7 +231,8 @@ pub async fn list_probes(
         .get("limit")
         .and_then(|v| v.parse().ok())
         .unwrap_or(100usize);
-    match state.db.list_probe_results(&id, limit) {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db.list_probe_results(&id, limit)).await.unwrap() {
         Ok(probes) => Json(probes).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
@@ -245,7 +248,8 @@ pub async fn list_alerts(
         .get("limit")
         .and_then(|v| v.parse().ok())
         .unwrap_or(100usize);
-    match state.db.list_alerts(limit) {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db.list_alerts(limit)).await.unwrap() {
         Ok(alerts) => Json(alerts).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
@@ -369,29 +373,33 @@ pub async fn update_position(
 }
 
 pub async fn auto_layout(State(state): State<AppState>) -> impl IntoResponse {
-    let devices = match state.db.list_devices() {
-        Ok(d) => d,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-    };
-    let links = match state.db.list_links() {
-        Ok(l) => l,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-    };
-    let positions = state.db.list_positions().unwrap_or_default();
+    let db = state.db.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let devices = db.list_devices()?;
+        let links = db.list_links()?;
+        let positions = db.list_positions().unwrap_or_default();
 
-    let device_ids: Vec<String> = devices.iter().map(|d| d.id.clone()).collect();
-    let link_pairs: Vec<(String, String)> = links
-        .iter()
-        .map(|l| (l.source_device_id.clone(), l.target_device_id.clone()))
-        .collect();
+        let device_ids: Vec<String> = devices.iter().map(|d| d.id.clone()).collect();
+        let link_pairs: Vec<(String, String)> = links
+            .iter()
+            .map(|l| (l.source_device_id.clone(), l.target_device_id.clone()))
+            .collect();
 
-    let new_positions = crate::topo::auto_layout(&device_ids, &positions, &link_pairs, 100);
+        let new_positions = crate::topo::auto_layout(&device_ids, &positions, &link_pairs, 100);
 
-    for pos in &new_positions {
-        let _ = state.db.upsert_position(pos.clone());
+        for pos in &new_positions {
+            let _ = db.upsert_position(pos.clone());
+        }
+
+        Ok::<_, anyhow::Error>(new_positions)
+    })
+    .await
+    .unwrap();
+
+    match result {
+        Ok(positions) => Json(positions).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
-
-    Json(new_positions).into_response()
 }
 
 // ── Metrics ──
@@ -404,12 +412,14 @@ pub async fn list_device_metrics(
     let metric = params
         .get("metric")
         .map(|s| s.as_str())
-        .unwrap_or("icmp_latency_us");
+        .unwrap_or("icmp_latency_us")
+        .to_string();
     let limit = params
         .get("limit")
         .and_then(|v| v.parse().ok())
         .unwrap_or(200usize);
-    match state.db.list_metrics(&id, metric, limit) {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db.list_metrics(&id, &metric, limit)).await.unwrap() {
         Ok(metrics) => Json(metrics).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
@@ -419,10 +429,11 @@ pub async fn query_metrics(
     State(state): State<AppState>,
     Query(q): Query<MetricQuery>,
 ) -> impl IntoResponse {
-    let device_id = q.device_id.as_deref().unwrap_or("");
-    let metric_name = q.metric_name.as_deref().unwrap_or("icmp_latency_us");
+    let device_id = q.device_id.as_deref().unwrap_or("").to_string();
+    let metric_name = q.metric_name.as_deref().unwrap_or("icmp_latency_us").to_string();
     let limit = q.limit.unwrap_or(200);
-    match state.db.list_metrics(device_id, metric_name, limit) {
+    let db = state.db.clone();
+    match tokio::task::spawn_blocking(move || db.list_metrics(&device_id, &metric_name, limit)).await.unwrap() {
         Ok(metrics) => Json(metrics).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
