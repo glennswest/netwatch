@@ -42,7 +42,18 @@ fn group_devices_by_network(devices: Vec<DeviceStatus>, subnets: &[Subnet]) -> V
     let mut groups: Vec<NetworkGroup> = group_map
         .into_values()
         .filter(|(_, _, devs)| !devs.is_empty())
-        .map(|(name, cidr, devices)| {
+        .map(|(name, cidr, mut devices)| {
+            // Sort devices by IP address numerically
+            devices.sort_by(|a, b| {
+                let a_ip: Option<std::net::IpAddr> = a.device.ip.parse().ok();
+                let b_ip: Option<std::net::IpAddr> = b.device.ip.parse().ok();
+                match (a_ip, b_ip) {
+                    (Some(std::net::IpAddr::V4(a4)), Some(std::net::IpAddr::V4(b4))) => {
+                        a4.octets().cmp(&b4.octets())
+                    }
+                    _ => a.device.ip.cmp(&b.device.ip),
+                }
+            });
             let up = devices.iter().filter(|d| d.status == ProbeStatus::Up).count();
             let down = devices
                 .iter()
@@ -116,7 +127,18 @@ fn group_services_by_network(
     let mut groups: Vec<ServiceNetworkGroup> = group_map
         .into_values()
         .filter(|(_, _, svcs)| !svcs.is_empty())
-        .map(|(name, cidr, services)| {
+        .map(|(name, cidr, mut services)| {
+            // Sort services by device IP numerically
+            services.sort_by(|a, b| {
+                let a_ip: Option<std::net::IpAddr> = a.device_ip.parse().ok();
+                let b_ip: Option<std::net::IpAddr> = b.device_ip.parse().ok();
+                match (a_ip, b_ip) {
+                    (Some(std::net::IpAddr::V4(a4)), Some(std::net::IpAddr::V4(b4))) => {
+                        a4.octets().cmp(&b4.octets())
+                    }
+                    _ => a.device_ip.cmp(&b.device_ip),
+                }
+            });
             let up = services
                 .iter()
                 .filter(|s| s.status == ProbeStatus::Up)
@@ -150,18 +172,26 @@ fn group_services_by_network(
 
 fn build_service_rows(db: &crate::db::Db) -> Vec<ServiceRow> {
     let all_services = db.list_services().unwrap_or_default();
+    let all_devices = db.list_devices().unwrap_or_default();
+    let all_latest: Vec<ProbeResult> = db.get_all_latest_probes().unwrap_or_default();
+
+    // Index devices by id
+    let dev_by_id: HashMap<&str, &Device> = all_devices.iter().map(|d| (d.id.as_str(), d)).collect();
+    // Index latest probes by service_id
+    let probe_by_svc: HashMap<&str, &ProbeResult> =
+        all_latest.iter().map(|p| (p.service_id.as_str(), p)).collect();
+
     let mut rows = Vec::new();
     for svc in all_services {
-        let device = db.get_device(&svc.device_id).ok().flatten();
-        let probe = db.get_latest_probe(&svc.id).ok().flatten();
+        let device = dev_by_id.get(svc.device_id.as_str());
+        let probe = probe_by_svc.get(svc.id.as_str());
         rows.push(ServiceRow {
-            device_name: device.as_ref().map(|d| d.name.clone()).unwrap_or_default(),
-            device_ip: device.as_ref().map(|d| d.ip.clone()).unwrap_or_default(),
+            device_name: device.map(|d| d.name.clone()).unwrap_or_default(),
+            device_ip: device.map(|d| d.ip.clone()).unwrap_or_default(),
             status: probe
-                .as_ref()
                 .map(|p| p.status)
                 .unwrap_or(ProbeStatus::Unknown),
-            latency_us: probe.as_ref().and_then(|p| p.latency_us),
+            latency_us: probe.and_then(|p| p.latency_us),
             service: svc,
         });
     }
@@ -416,7 +446,7 @@ pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
     .unwrap();
 
     let mut map_devices = Vec::new();
-    for ds in &statuses {
+    for ds in statuses.iter().filter(|ds| ds.status == ProbeStatus::Up || ds.status == ProbeStatus::Degraded) {
         let pos = positions
             .iter()
             .find(|p| p.device_id == ds.device.id)

@@ -242,6 +242,10 @@ impl Db {
         self.get_one(LATEST_PROBES, service_id)
     }
 
+    pub fn get_all_latest_probes(&self) -> Result<Vec<ProbeResult>> {
+        self.get_all(LATEST_PROBES)
+    }
+
     // ── Alerts ──
 
     pub fn insert_alert(&self, alert: Alert) -> Result<()> {

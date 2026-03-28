@@ -22,14 +22,14 @@
         <table>
             <thead>
                 <tr>
-                    <th>Status</th>
-                    <th>Service</th>
-                    <th>Device</th>
-                    <th>IP</th>
-                    <th>Type</th>
-                    <th>Port</th>
+                    <th class="sortable" data-sort="text" onclick="sortTable(this)">Status</th>
+                    <th class="sortable" data-sort="text" onclick="sortTable(this)">Service</th>
+                    <th class="sortable" data-sort="text" onclick="sortTable(this)">Device</th>
+                    <th class="sortable" data-sort="ip" onclick="sortTable(this)">IP</th>
+                    <th class="sortable" data-sort="text" onclick="sortTable(this)">Type</th>
+                    <th class="sortable" data-sort="num" onclick="sortTable(this)">Port</th>
                     <th>Interval</th>
-                    <th>Latency</th>
+                    <th class="sortable" data-sort="num" onclick="sortTable(this)">Latency</th>
                 </tr>
             </thead>
             <tbody>

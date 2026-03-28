@@ -59,13 +59,13 @@
         <table>
             <thead>
                 <tr>
-                    <th>Status</th>
-                    <th>Name</th>
-                    <th>IP</th>
-                    <th>Type</th>
-                    <th>Vendor</th>
+                    <th class="sortable" data-sort="text" onclick="sortTable(this)">Status</th>
+                    <th class="sortable" data-sort="text" onclick="sortTable(this)">Name</th>
+                    <th class="sortable" data-sort="ip" onclick="sortTable(this)">IP</th>
+                    <th class="sortable" data-sort="text" onclick="sortTable(this)">Type</th>
+                    <th class="sortable" data-sort="text" onclick="sortTable(this)">Vendor</th>
                     <th>Services</th>
-                    <th>Latency</th>
+                    <th class="sortable" data-sort="num" onclick="sortTable(this)">Latency</th>
                     <th>Actions</th>
                 </tr>
             </thead>

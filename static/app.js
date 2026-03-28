@@ -86,6 +86,52 @@ document.addEventListener('htmx:afterSwap', (event) => {
     }
 });
 
+// ── Table sorting ──
+
+function sortTable(th) {
+    const table = th.closest('table');
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const colIdx = Array.from(th.parentNode.children).indexOf(th);
+    const sortType = th.dataset.sort || 'text';
+    const asc = th.classList.contains('sort-asc');
+
+    // Clear sort indicators from sibling headers
+    th.parentNode.querySelectorAll('th').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+    th.classList.add(asc ? 'sort-desc' : 'sort-asc');
+
+    rows.sort((a, b) => {
+        const aText = a.children[colIdx]?.textContent.trim() || '';
+        const bText = b.children[colIdx]?.textContent.trim() || '';
+        let cmp = 0;
+
+        if (sortType === 'ip') {
+            cmp = compareIp(aText, bText);
+        } else if (sortType === 'num') {
+            cmp = parseNum(aText) - parseNum(bText);
+        } else {
+            cmp = aText.localeCompare(bText, undefined, { sensitivity: 'base' });
+        }
+        return asc ? -cmp : cmp;
+    });
+
+    rows.forEach(r => tbody.appendChild(r));
+}
+
+function compareIp(a, b) {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < 4; i++) {
+        if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+    }
+    return 0;
+}
+
+function parseNum(s) {
+    const n = parseFloat(s);
+    return isNaN(n) ? -1 : n;
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     connectWebSocket();

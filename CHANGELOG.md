@@ -7,6 +7,11 @@
 - **fix:** Add `LATEST_PROBES` redb table for O(1) latest-probe-per-service lookup
 - **fix:** Wrap all blocking redb calls in `spawn_blocking` to prevent async runtime starvation
 - **perf:** Dashboard, devices, map, services, alerts pages now respond instantly instead of hanging
+- **perf:** Batch-load `build_service_rows` — single table scan instead of N+1 queries per service
+- **perf:** Map filtered to Up/Degraded devices only — no more rendering 500+ down nodes
+- **feat:** Sortable table columns — click headers to sort by status, name, IP, type, latency
+- **feat:** Default sort by IP address (numeric octets) within each network group
+- **fix:** Reduce WebSocket noise — only broadcast probe events for Down/Degraded status changes
 
 ### 2026-03-26
 - **feat:** Initial project creation — complete network monitoring app

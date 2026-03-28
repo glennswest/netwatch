@@ -376,6 +376,27 @@ details[open] > .network-header::before {
     border-radius: var(--radius-lg);
 }
 
+/* Sortable headers */
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 1.5rem;
+}
+
+th.sortable:hover { color: var(--text-primary); }
+
+th.sortable::after {
+    content: "\2195";
+    position: absolute;
+    right: 0.5rem;
+    opacity: 0.3;
+    font-size: 0.75rem;
+}
+
+th.sortable.sort-asc::after { content: "\2191"; opacity: 0.8; }
+th.sortable.sort-desc::after { content: "\2193"; opacity: 0.8; }
+
 /* Responsive */
 @media (max-width: 768px) {
     .nav-links { gap: 0; overflow-x: auto; }

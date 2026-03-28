@@ -79,14 +79,16 @@ pub async fn run(
                     let _ = db.insert_metric(metric);
                 }
 
-                // Broadcast status change via WebSocket
-                let _ = ws_tx.send(format!(
-                    r#"{{"event":"probe","service_id":"{}","device_id":"{}","status":"{}","latency_us":{}}}"#,
-                    svc.id,
-                    svc.device_id,
-                    result.status,
-                    result.latency_us.unwrap_or(0)
-                ));
+                // Only broadcast status changes for alerts (Down/Degraded), not routine probes
+                if result.status == ProbeStatus::Down || result.status == ProbeStatus::Degraded {
+                    let _ = ws_tx.send(format!(
+                        r#"{{"event":"probe","service_id":"{}","device_id":"{}","status":"{}","latency_us":{}}}"#,
+                        svc.id,
+                        svc.device_id,
+                        result.status,
+                        result.latency_us.unwrap_or(0)
+                    ));
+                }
             });
 
             handles.push(handle);
