@@ -30,6 +30,7 @@
 - **feat:** Each device centered over its children subtree, minimizing wire lengths throughout
 - **feat:** Orphan devices (no links) placed in a row at the bottom of the map
 - **feat:** `is_virtual` field promoted to top level of `/api/devices` response for easier access
+- **fix:** Container icon color changed from teal (#26a69a) to blue-grey (#78909c) — no longer looks like switches
 
 ## [v0.4.0] — 2026-03-29
 

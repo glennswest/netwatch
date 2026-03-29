@@ -77,7 +77,7 @@ impl DeviceType {
             Self::Camera => "#e5a54b",
             Self::Phone => "#5baae5",
             Self::Internet => "#43b581",
-            Self::Container => "#26a69a",
+            Self::Container => "#78909c",
             Self::Other => "#6b7084",
         }
     }
