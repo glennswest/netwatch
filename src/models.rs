@@ -368,6 +368,7 @@ pub struct DeviceStatus {
     pub services_total: usize,
     pub latency_us: Option<i64>,
     pub position: Option<MapPosition>,
+    pub is_virtual: bool,
 }
 
 pub struct NetworkGroup {

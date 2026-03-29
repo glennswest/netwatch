@@ -504,6 +504,7 @@ impl Db {
             };
 
             let position = pos_by_device.get(&device.id).cloned().cloned();
+            let is_virtual = device.is_virtual;
             statuses.push(DeviceStatus {
                 device,
                 status,
@@ -512,6 +513,7 @@ impl Db {
                 services_total: svc_count,
                 latency_us: latency,
                 position,
+                is_virtual,
             });
         }
         Ok(statuses)

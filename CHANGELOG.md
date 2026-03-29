@@ -29,6 +29,7 @@
 - **feat:** Topology-driven BFS tree layout — map positions devices under their actual parent from link data instead of fixed subnet tiers
 - **feat:** Each device centered over its children subtree, minimizing wire lengths throughout
 - **feat:** Orphan devices (no links) placed in a row at the bottom of the map
+- **feat:** `is_virtual` field promoted to top level of `/api/devices` response for easier access
 
 ## [v0.4.0] — 2026-03-29
 
