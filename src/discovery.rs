@@ -627,7 +627,61 @@ async fn fetch_interfaces(
     Ok(())
 }
 
+/// Check if two IPs are on the same subnet.
+fn same_subnet(a: &str, b: &str) -> bool {
+    let a_octets: Vec<u8> = a.split('.').filter_map(|o| o.parse().ok()).collect();
+    let b_octets: Vec<u8> = b.split('.').filter_map(|o| o.parse().ok()).collect();
+    a_octets.len() == 4 && b_octets.len() == 4
+        && a_octets[0] == b_octets[0]
+        && a_octets[1] == b_octets[1]
+        && a_octets[2] == b_octets[2]
+}
+
+/// Find a switch (or switch-like infrastructure device) on the same /24 subnet.
+fn find_subnet_switch<'a>(ip: &str, devices: &'a [Device]) -> Option<&'a Device> {
+    // Prefer actual Switch type
+    if let Some(sw) = devices.iter().find(|d| d.device_type == DeviceType::Switch && same_subnet(&d.ip, ip)) {
+        return Some(sw);
+    }
+    // Fall back to a router at .254 (common for MikroTik switches running RouterOS)
+    let octets: Vec<&str> = ip.split('.').collect();
+    if octets.len() == 4 {
+        let gw254 = format!("{}.{}.{}.254", octets[0], octets[1], octets[2]);
+        if let Some(sw) = devices.iter().find(|d| d.ip == gw254 && d.device_type.is_infrastructure()) {
+            return Some(sw);
+        }
+    }
+    None
+}
+
+/// Create a link between two devices if one doesn't already exist.
+fn ensure_link(db: &Db, source: &Device, target: &Device) {
+    let links = match db.list_links() {
+        Ok(l) => l,
+        Err(_) => return,
+    };
+    let exists = links.iter().any(|l| {
+        (l.source_device_id == source.id && l.target_device_id == target.id)
+            || (l.source_device_id == target.id && l.target_device_id == source.id)
+    });
+    if !exists {
+        let link = Link {
+            id: uuid::Uuid::new_v4().to_string(),
+            source_device_id: source.id.clone(),
+            target_device_id: target.id.clone(),
+            source_if_id: None,
+            target_if_id: None,
+            link_type: "ethernet".to_string(),
+            bandwidth_mbps: None,
+        };
+        let _ = db.insert_link(link);
+        tracing::info!("discovery: link {} <-> {} (LLDP)", source.name, target.name);
+    }
+}
+
 /// Discover LLDP neighbors via SNMP and create links.
+/// When two non-switch devices on the same subnet report each other,
+/// route both through the subnet's switch instead of a direct link.
 async fn discover_neighbors(db: &Db, config: &Config) -> Result<()> {
     let devices = db.list_devices()?;
     let timeout = config.discovery.snmp_timeout_ms;
@@ -647,6 +701,7 @@ async fn discover_neighbors(db: &Db, config: &Config) -> Result<()> {
         )
         .await
         {
+            let all_devices = db.list_devices()?;
             for (_oid, val) in neighbors {
                 let neighbor_name = val.as_string();
                 if neighbor_name.is_empty() {
@@ -654,33 +709,22 @@ async fn discover_neighbors(db: &Db, config: &Config) -> Result<()> {
                 }
 
                 // Find the neighbor device by name
-                let all_devices = db.list_devices()?;
                 if let Some(neighbor) = all_devices.iter().find(|d| d.name == neighbor_name) {
-                    // Check if link already exists
-                    let links = db.list_links()?;
-                    let exists = links.iter().any(|l| {
-                        (l.source_device_id == device.id && l.target_device_id == neighbor.id)
-                            || (l.source_device_id == neighbor.id
-                                && l.target_device_id == device.id)
-                    });
-
-                    if !exists {
-                        let link = Link {
-                            id: uuid::Uuid::new_v4().to_string(),
-                            source_device_id: device.id.clone(),
-                            target_device_id: neighbor.id.clone(),
-                            source_if_id: None,
-                            target_if_id: None,
-                            link_type: "ethernet".to_string(),
-                            bandwidth_mbps: None,
-                        };
-                        let _ = db.insert_link(link);
-                        tracing::info!(
-                            "discovery: link {} <-> {} (LLDP)",
-                            device.name,
-                            neighbor_name
-                        );
+                    // If both devices are non-switches on the same subnet and there's
+                    // a switch on that subnet, route through the switch instead of
+                    // creating a direct link (avoids false AP-to-AP links from CAPsMAN)
+                    if device.device_type != DeviceType::Switch
+                        && neighbor.device_type != DeviceType::Switch
+                        && same_subnet(&device.ip, &neighbor.ip)
+                    {
+                        if let Some(sw) = find_subnet_switch(&device.ip, &all_devices) {
+                            ensure_link(db, device, sw);
+                            ensure_link(db, neighbor, sw);
+                            continue;
+                        }
                     }
+
+                    ensure_link(db, device, neighbor);
                 }
             }
         }

@@ -567,8 +567,28 @@ pub fn guess_device_type(sys_descr: &str, sys_object_id: &str) -> crate::models:
     let desc = sys_descr.to_lowercase();
     let oid = sys_object_id;
 
-    // MikroTik
+    // MikroTik — differentiate switches, APs, and routers by model in sysDescr
     if desc.contains("mikrotik") || desc.contains("routeros") || oid.starts_with("1.3.6.1.4.1.14988") {
+        // CAP/cAP/wAP models are access points
+        if desc.contains("cap") || desc.contains("wap") || desc.contains("audience")
+            || desc.contains("chateau") && desc.contains("wifi")
+        {
+            return crate::models::DeviceType::Ap;
+        }
+        // CSS/CRS models and switch-oriented boards (model ends with S like L009UiGS)
+        if desc.contains("css") || desc.contains("crs")
+            || desc.contains("switch")
+        {
+            return crate::models::DeviceType::Switch;
+        }
+        // Models with "GS" suffix are typically switch products (L009UiGS, etc.)
+        let parts: Vec<&str> = sys_descr.split_whitespace().collect();
+        for part in &parts {
+            let p = part.to_uppercase();
+            if (p.ends_with("GS") || p.ends_with("GS-5")) && p.len() > 3 {
+                return crate::models::DeviceType::Switch;
+            }
+        }
         return crate::models::DeviceType::Router;
     }
     // Cisco

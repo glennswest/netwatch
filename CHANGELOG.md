@@ -10,6 +10,8 @@
 - **fix:** Skip non-RFC1918 networks from ping sweep (was scanning public 24.158.x.x/22)
 - **fix:** DNS PTR resolution — try per-subnet DNS servers (non-gateway) before system resolver
 - **fix:** Exclude gateway (.1) from DNS server discovery — gateways forward DNS but lack PTR records
+- **fix:** MikroTik device classification — detect switches (CSS/CRS/GS models) and APs (CAP/wAP) from sysDescr
+- **fix:** LLDP link routing — route AP-to-AP links through subnet switch instead of direct false connections
 
 ## [v0.3.0] — 2026-03-27
 
