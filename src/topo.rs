@@ -1,143 +1,139 @@
-//! Topology layout — force-directed auto-placement for the network map.
+//! Topology layout — hierarchical placement for the network map.
 
 use crate::models::MapPosition;
+use std::collections::BTreeMap;
 
-const REPULSION: f64 = 5000.0;
-const ATTRACTION: f64 = 0.01;
-const DAMPING: f64 = 0.9;
-const MIN_DISTANCE: f64 = 50.0;
-const CANVAS_W: f64 = 1200.0;
-const CANVAS_H: f64 = 800.0;
 const PADDING: f64 = 60.0;
+const TIER_Y: [f64; 5] = [80.0, 250.0, 420.0, 590.0, 760.0];
+const NODE_SPACING: f64 = 130.0;
+const GROUP_GAP: f64 = 80.0;
 
-/// Auto-layout devices using force-directed algorithm.
-/// Takes current positions (if any) and links, returns updated positions.
-pub fn auto_layout(
-    device_ids: &[String],
-    existing_positions: &[MapPosition],
-    links: &[(String, String)], // (source_id, target_id)
-    iterations: usize,
-) -> Vec<MapPosition> {
-    let n = device_ids.len();
-    if n == 0 {
+/// Minimal device info needed for hierarchical placement.
+pub struct DeviceInfo {
+    pub id: String,
+    pub device_type: String,
+    pub ip: String,
+}
+
+fn tier_for_type(device_type: &str) -> usize {
+    match device_type {
+        "internet" => 0,
+        "router" => 1,
+        "switch" => 2,
+        "ap" | "firewall" | "server" => 3,
+        _ => 4,
+    }
+}
+
+fn subnet_key(ip: &str) -> String {
+    let parts: Vec<&str> = ip.split('.').collect();
+    if parts.len() >= 3 {
+        format!("{}.{}.{}", parts[0], parts[1], parts[2])
+    } else {
+        ip.to_string()
+    }
+}
+
+/// Hierarchical layout: devices organized by network role tier and /24 subnet.
+///
+/// Tier 0 (y=80):  Internet
+/// Tier 1 (y=250): Routers
+/// Tier 2 (y=420): Switches
+/// Tier 3 (y=590): APs, Firewalls, Servers
+/// Tier 4 (y=760): Cameras, Phones, Printers, Other
+///
+/// Within each tier, devices are grouped by /24 subnet with 80px gaps between groups
+/// and 130px spacing between nodes.
+pub fn hierarchical_place(devices: &[DeviceInfo]) -> Vec<MapPosition> {
+    if devices.is_empty() {
         return vec![];
     }
 
-    // Initialize positions
-    let mut xs: Vec<f64> = Vec::with_capacity(n);
-    let mut ys: Vec<f64> = Vec::with_capacity(n);
+    // Assign devices to tiers
+    let mut tiers: Vec<Vec<&DeviceInfo>> = vec![vec![]; 5];
+    for dev in devices {
+        let tier = tier_for_type(&dev.device_type);
+        tiers[tier].push(dev);
+    }
 
-    for (i, id) in device_ids.iter().enumerate() {
-        if let Some(pos) = existing_positions.iter().find(|p| p.device_id == *id) {
-            xs.push(pos.x);
-            ys.push(pos.y);
-        } else {
-            // Place in a circle initially
-            let angle = 2.0 * std::f64::consts::PI * (i as f64) / (n as f64);
-            let r = (CANVAS_W.min(CANVAS_H) / 2.0) - PADDING;
-            xs.push(CANVAS_W / 2.0 + r * angle.cos());
-            ys.push(CANVAS_H / 2.0 + r * angle.sin());
+    let mut results = Vec::new();
+
+    for (tier_idx, tier_devices) in tiers.iter().enumerate() {
+        if tier_devices.is_empty() {
+            continue;
+        }
+
+        let y = TIER_Y[tier_idx];
+
+        // Group by /24 subnet, sorted by subnet key
+        let mut subnet_groups: BTreeMap<String, Vec<&DeviceInfo>> = BTreeMap::new();
+        for dev in tier_devices {
+            subnet_groups.entry(subnet_key(&dev.ip)).or_default().push(dev);
+        }
+
+        // Flatten into ordered list tracking group boundaries
+        let mut ordered: Vec<(&DeviceInfo, bool)> = Vec::new(); // (device, starts_new_group)
+        for (i, (_key, group)) in subnet_groups.iter().enumerate() {
+            for (j, dev) in group.iter().enumerate() {
+                ordered.push((dev, j == 0 && i > 0));
+            }
+        }
+
+        if ordered.is_empty() {
+            continue;
+        }
+
+        // Calculate total width
+        let mut total_width = 0.0_f64;
+        for (i, &(_, new_group)) in ordered.iter().enumerate() {
+            if i > 0 {
+                total_width += NODE_SPACING;
+                if new_group {
+                    total_width += GROUP_GAP;
+                }
+            }
+        }
+
+        // Place centered at x=0
+        let mut x = -total_width / 2.0;
+        for (i, &(dev, new_group)) in ordered.iter().enumerate() {
+            if i > 0 {
+                x += NODE_SPACING;
+                if new_group {
+                    x += GROUP_GAP;
+                }
+            }
+            results.push(MapPosition {
+                device_id: dev.id.clone(),
+                x: (x * 10.0).round() / 10.0,
+                y,
+            });
         }
     }
 
-    let mut vx = vec![0.0f64; n];
-    let mut vy = vec![0.0f64; n];
-
-    // Build link index map
-    let id_to_idx: std::collections::HashMap<&str, usize> = device_ids
-        .iter()
-        .enumerate()
-        .map(|(i, id)| (id.as_str(), i))
-        .collect();
-
-    for _ in 0..iterations {
-        let mut fx = vec![0.0f64; n];
-        let mut fy = vec![0.0f64; n];
-
-        // Repulsion between all pairs
-        for i in 0..n {
-            for j in (i + 1)..n {
-                let dx = xs[i] - xs[j];
-                let dy = ys[i] - ys[j];
-                let dist = (dx * dx + dy * dy).sqrt().max(MIN_DISTANCE);
-                let force = REPULSION / (dist * dist);
-                let fx_comp = force * dx / dist;
-                let fy_comp = force * dy / dist;
-                fx[i] += fx_comp;
-                fy[i] += fy_comp;
-                fx[j] -= fx_comp;
-                fy[j] -= fy_comp;
-            }
-        }
-
-        // Attraction along links
-        for (src, tgt) in links {
-            if let (Some(&si), Some(&ti)) = (id_to_idx.get(src.as_str()), id_to_idx.get(tgt.as_str())) {
-                let dx = xs[si] - xs[ti];
-                let dy = ys[si] - ys[ti];
-                let dist = (dx * dx + dy * dy).sqrt().max(1.0);
-                let force = ATTRACTION * dist;
-                let fx_comp = force * dx / dist;
-                let fy_comp = force * dy / dist;
-                fx[si] -= fx_comp;
-                fy[si] -= fy_comp;
-                fx[ti] += fx_comp;
-                fy[ti] += fy_comp;
-            }
-        }
-
-        // Center gravity (pull toward center)
-        for i in 0..n {
-            let dx = xs[i] - CANVAS_W / 2.0;
-            let dy = ys[i] - CANVAS_H / 2.0;
-            fx[i] -= dx * 0.001;
-            fy[i] -= dy * 0.001;
-        }
-
-        // Apply forces
-        for i in 0..n {
-            vx[i] = (vx[i] + fx[i]) * DAMPING;
-            vy[i] = (vy[i] + fy[i]) * DAMPING;
-
-            // Clamp velocity
-            let speed = (vx[i] * vx[i] + vy[i] * vy[i]).sqrt();
-            if speed > 50.0 {
-                vx[i] = vx[i] / speed * 50.0;
-                vy[i] = vy[i] / speed * 50.0;
-            }
-
-            xs[i] += vx[i];
-            ys[i] += vy[i];
-
-            // Keep within bounds
-            xs[i] = xs[i].clamp(PADDING, CANVAS_W - PADDING);
-            ys[i] = ys[i].clamp(PADDING, CANVAS_H - PADDING);
+    // Shift all positions so minimum x = PADDING
+    if let Some(min_x) = results.iter().map(|p| p.x).reduce(f64::min) {
+        let shift = PADDING - min_x;
+        for pos in &mut results {
+            pos.x += shift;
         }
     }
 
-    device_ids
-        .iter()
-        .enumerate()
-        .map(|(i, id)| MapPosition {
-            device_id: id.clone(),
-            x: (xs[i] * 10.0).round() / 10.0,
-            y: (ys[i] * 10.0).round() / 10.0,
-        })
-        .collect()
+    results
 }
 
 /// Place a single new device near an existing device (for when new devices are discovered).
 pub fn place_near(existing: &MapPosition) -> (f64, f64) {
     let offset = 80.0;
     let angle = rand::random::<f64>() * 2.0 * std::f64::consts::PI;
-    let x = (existing.x + offset * angle.cos()).clamp(PADDING, CANVAS_W - PADDING);
-    let y = (existing.y + offset * angle.sin()).clamp(PADDING, CANVAS_H - PADDING);
+    let x = existing.x + offset * angle.cos();
+    let y = existing.y + offset * angle.sin();
     (x, y)
 }
 
 /// Place a device at a random position.
 pub fn place_random() -> (f64, f64) {
-    let x = PADDING + rand::random::<f64>() * (CANVAS_W - 2.0 * PADDING);
-    let y = PADDING + rand::random::<f64>() * (CANVAS_H - 2.0 * PADDING);
+    let x = PADDING + rand::random::<f64>() * (1200.0 - 2.0 * PADDING);
+    let y = PADDING + rand::random::<f64>() * (800.0 - 2.0 * PADDING);
     (x, y)
 }

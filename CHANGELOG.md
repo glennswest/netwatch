@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### 2026-03-29
+- **feat:** Hierarchical map layout — devices organized by network role tier (Internet → Routers → Switches → APs/Servers → End devices)
+- **feat:** Subnet grouping within tiers — devices grouped by /24 subnet with visual gaps between groups
+- **feat:** Auto-fit viewBox — map auto-zooms to fit all devices with 120px padding on load
+- **feat:** Persistent initial placement — new devices get hierarchical positions saved to DB on first map load
+- **fix:** Icon rendering — replaced fragile heuristic path detection with explicit fill/stroke icon format
+- **fix:** WiFi arcs, globe longitude curves, camera dome correctly stroked instead of filled
+- **fix:** "Reset View" button now fits to content instead of hardcoded 1200x800
+- **fix:** "Auto Layout" uses hierarchical placement instead of force-directed (better for network topologies)
+
 ## [v0.4.0] — 2026-03-29
 
 ### Added

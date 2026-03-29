@@ -442,6 +442,7 @@ struct MapTemplate {
 
 pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
     let db = state.db.clone();
+    let db2 = state.db.clone();
     let (statuses, links, positions) = tokio::task::spawn_blocking(move || {
         (
             db.get_device_statuses().unwrap_or_default(),
@@ -452,20 +453,55 @@ pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
     .await
     .unwrap();
 
+    // Build position lookup
+    let mut pos_map: HashMap<String, MapPosition> = positions
+        .into_iter()
+        .map(|p| (p.device_id.clone(), p))
+        .collect();
+
+    // Collect visible (non-Down) devices
+    let visible: Vec<&DeviceStatus> = statuses
+        .iter()
+        .filter(|ds| ds.status != ProbeStatus::Down)
+        .collect();
+
+    // Find devices without saved positions and place them hierarchically
+    let unpositioned: Vec<crate::topo::DeviceInfo> = visible
+        .iter()
+        .filter(|ds| !pos_map.contains_key(&ds.device.id))
+        .map(|ds| crate::topo::DeviceInfo {
+            id: ds.device.id.clone(),
+            device_type: ds.device.device_type.as_str().to_string(),
+            ip: ds.device.ip.clone(),
+        })
+        .collect();
+
+    if !unpositioned.is_empty() {
+        let new_positions = crate::topo::hierarchical_place(&unpositioned);
+        // Save computed positions to DB so they persist across reloads
+        let save_positions = new_positions.clone();
+        tokio::task::spawn_blocking(move || {
+            for pos in save_positions {
+                let _ = db2.upsert_position(pos);
+            }
+        })
+        .await
+        .unwrap();
+        for pos in new_positions {
+            pos_map.insert(pos.device_id.clone(), pos);
+        }
+    }
+
     let mut map_devices = Vec::new();
-    for ds in statuses.iter().filter(|ds| ds.status != ProbeStatus::Down) {
-        let pos = positions
-            .iter()
-            .find(|p| p.device_id == ds.device.id)
-            .cloned()
-            .unwrap_or_else(|| {
-                let (x, y) = crate::topo::place_random();
-                MapPosition {
-                    device_id: ds.device.id.clone(),
-                    x,
-                    y,
-                }
-            });
+    for ds in &visible {
+        let pos = pos_map.remove(&ds.device.id).unwrap_or_else(|| {
+            let (x, y) = crate::topo::place_random();
+            MapPosition {
+                device_id: ds.device.id.clone(),
+                x,
+                y,
+            }
+        });
 
         map_devices.push(serde_json::json!({
             "id": ds.device.id,

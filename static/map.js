@@ -9,108 +9,110 @@ const STATUS_COLORS = {
     unknown: '#6b7084',
 };
 
-// SVG icon paths for each device type, designed for a 48x48 viewBox centered at 0,0
+// SVG icon paths for each device type — explicit fill/stroke separation.
+// Coordinate space centered at 0,0, fits within radius ~10 (scaled by radius/14).
+// fill paths: rendered with fill='#fff', stroke='none'
+// stroke paths: rendered with fill='none', stroke='#fff', stroke-width=1.5
 const DEVICE_ICONS = {
-    router: [
-        // Center dot with 4 directional arrows
-        'M-1.5,-1.5 L1.5,-1.5 L1.5,1.5 L-1.5,1.5 Z',
-        // Up arrow
-        'M-1,-3 L0,-6 L1,-3 Z', 'M-0.5,-3 L-0.5,-8 L0.5,-8 L0.5,-3 Z',
-        // Down arrow
-        'M-1,3 L0,6 L1,3 Z', 'M-0.5,3 L-0.5,8 L0.5,8 L0.5,3 Z',
-        // Left arrow
-        'M-3,-1 L-6,0 L-3,1 Z', 'M-3,-0.5 L-8,-0.5 L-8,0.5 L-3,0.5 Z',
-        // Right arrow
-        'M3,-1 L6,0 L3,1 Z', 'M3,-0.5 L8,-0.5 L8,0.5 L3,0.5 Z',
-    ],
-    switch: [
-        // Wide chassis
-        'M-10,-3.5 L10,-3.5 L10,3.5 L-10,3.5 Z',
-        // Port row (6 ports)
-        'M-8,-1.5 L-6,-1.5 L-6,0.5 L-8,0.5 Z',
-        'M-4.5,-1.5 L-2.5,-1.5 L-2.5,0.5 L-4.5,0.5 Z',
-        'M-1,-1.5 L1,-1.5 L1,0.5 L-1,0.5 Z',
-        'M2.5,-1.5 L4.5,-1.5 L4.5,0.5 L2.5,0.5 Z',
-        'M6,-1.5 L8,-1.5 L8,0.5 L6,0.5 Z',
-        // Status LED
-        'M7.5,1.5 L8.5,1.5 L8.5,2.5 L7.5,2.5 Z',
-    ],
-    server: [
-        // Stacked rack units with rounded feel
-        'M-7,-8 L7,-8 L7,-3.5 L-7,-3.5 Z',
-        'M-7,-2.5 L7,-2.5 L7,2 L-7,2 Z',
-        'M-7,3 L7,3 L7,7.5 L-7,7.5 Z',
-        // Drive indicators
-        'M-5,-6.5 L-3.5,-6.5 L-3.5,-5 L-5,-5 Z',
-        'M-5,-1 L-3.5,-1 L-3.5,0.5 L-5,0.5 Z',
-        'M-5,4.5 L-3.5,4.5 L-3.5,6 L-5,6 Z',
-        // Power LED per unit
-        'M5,-6 L5.8,-6 L5.8,-5.2 L5,-5.2 Z',
-        'M5,-0.5 L5.8,-0.5 L5.8,0.3 L5,0.3 Z',
-        'M5,5 L5.8,5 L5.8,5.8 L5,5.8 Z',
-    ],
-    firewall: [
-        // Shield outline
-        'M0,-9 L7.5,-5.5 L7.5,1 Q7.5,7 0,9.5 Q-7.5,7 -7.5,1 L-7.5,-5.5 Z',
-        // Checkmark inside shield
-        'M-3,0.5 L-0.5,3 L4,-2.5',
-    ],
-    ap: [
-        // Base
-        'M-1.5,5 L1.5,5 L2.5,8 L-2.5,8 Z',
-        'M-4,8 L4,8 L4,9 L-4,9 Z',
-        // Antenna
-        'M0,5 L0,1',
-        // WiFi arcs
-        'M-3,0 Q0,-4 3,0',
-        'M-5.5,-1 Q0,-7 5.5,-1',
-        'M-8,-2 Q0,-10 8,-2',
-    ],
-    printer: [
-        // Paper coming out top
-        'M-4,-8 L4,-8 L4,-4 L-4,-4 Z',
-        // Printer body
-        'M-7,-4 L7,-4 L7,3 L-7,3 Z',
-        // Paper tray bottom
-        'M-5,3 L5,3 L5,7 L-5,7 Z',
-        // Button/LED
-        'M5,-2 L6.5,-2 L6.5,-0.5 L5,-0.5 Z',
-    ],
-    camera: [
-        // Dome camera base
-        'M-8,2 L8,2 L8,4 L-8,4 Z',
-        // Dome
-        'M-6,2 Q-6,-6 0,-7 Q6,-6 6,2 Z',
-        // Lens
-        'M-2,0 A2,2 0 1,0 2,0 A2,2 0 1,0 -2,0 Z',
-    ],
-    phone: [
-        // Smartphone outline
-        'M-3.5,-8.5 Q-4.5,-8.5 -4.5,-7.5 L-4.5,7.5 Q-4.5,8.5 -3.5,8.5 L3.5,8.5 Q4.5,8.5 4.5,7.5 L4.5,-7.5 Q4.5,-8.5 3.5,-8.5 Z',
-        // Screen
-        'M-3.5,-6.5 L3.5,-6.5 L3.5,5.5 L-3.5,5.5 Z',
-        // Home button
-        'M-1,7 L1,7 L1,8 L-1,8 Z',
-    ],
-    internet: [
-        // Globe circle
-        'M0,-9 A9,9 0 1,0 0.01,-9 Z',
-        // Longitude lines
-        'M0,-9 Q-6,0 0,9', 'M0,-9 Q6,0 0,9',
-        // Latitude lines
-        'M-9,0 L9,0',
-        'M-7.8,-4.5 L7.8,-4.5',
-        'M-7.8,4.5 L7.8,4.5',
-    ],
-    other: [
-        // Monitor screen
-        'M-8,-7 L8,-7 L8,4 L-8,4 Z',
-        // Screen inner
-        'M-6.5,-5.5 L6.5,-5.5 L6.5,2.5 L-6.5,2.5 Z',
-        // Stand
-        'M-2,4 L2,4 L2,6 L-2,6 Z',
-        'M-4,6 L4,6 L4,7.5 L-4,7.5 Z',
-    ],
+    router: {
+        fill: [
+            'M-1.5,-1.5 L1.5,-1.5 L1.5,1.5 L-1.5,1.5 Z',
+            'M0,-8 L-2.5,-4.5 L2.5,-4.5 Z',
+            'M0,8 L-2.5,4.5 L2.5,4.5 Z',
+            'M-8,0 L-4.5,-2.5 L-4.5,2.5 Z',
+            'M8,0 L4.5,-2.5 L4.5,2.5 Z',
+        ],
+        stroke: [
+            'M0,-2 L0,-4.5',
+            'M0,2 L0,4.5',
+            'M-2,0 L-4.5,0',
+            'M2,0 L4.5,0',
+        ],
+    },
+    switch: {
+        fill: [
+            'M-7,-0.5 L-5.5,-0.5 L-5.5,1 L-7,1 Z',
+            'M-3.5,-0.5 L-2,-0.5 L-2,1 L-3.5,1 Z',
+            'M0,-0.5 L1.5,-0.5 L1.5,1 L0,1 Z',
+            'M3.5,-0.5 L5,-0.5 L5,1 L3.5,1 Z',
+            'M7,-0.5 L8.5,-0.5 L8.5,1 L7,1 Z',
+        ],
+        stroke: [
+            'M-10,-3 L10,-3 L10,3 L-10,3 Z',
+        ],
+    },
+    server: {
+        fill: [
+            'M-7,-8 L7,-8 L7,-3.5 L-7,-3.5 Z',
+            'M-7,-2.5 L7,-2.5 L7,2 L-7,2 Z',
+            'M-7,3 L7,3 L7,7.5 L-7,7.5 Z',
+        ],
+        stroke: [],
+    },
+    firewall: {
+        fill: [
+            'M0,-9 L7.5,-5.5 L7.5,1 Q7.5,7 0,9.5 Q-7.5,7 -7.5,1 L-7.5,-5.5 Z',
+        ],
+        stroke: [],
+    },
+    ap: {
+        fill: [
+            'M-1.5,5 L1.5,5 L2.5,8 L-2.5,8 Z',
+            'M-4,8 L4,8 L4,9 L-4,9 Z',
+        ],
+        stroke: [
+            'M0,5 L0,1',
+            'M-3,0 Q0,-4 3,0',
+            'M-5.5,-1 Q0,-7 5.5,-1',
+            'M-8,-2 Q0,-10 8,-2',
+        ],
+    },
+    printer: {
+        fill: [
+            'M-4,-8 L4,-8 L4,-5 L-4,-5 Z',
+            'M-7,-4 L7,-4 L7,2 L-7,2 Z',
+            'M-5,3 L5,3 L5,7 L-5,7 Z',
+        ],
+        stroke: [],
+    },
+    camera: {
+        fill: [
+            'M-8,2 L8,2 L8,4 L-8,4 Z',
+        ],
+        stroke: [
+            'M-6,2 Q-6,-6 0,-7 Q6,-6 6,2',
+            'M-2,0 A2,2 0 1,0 2,0 A2,2 0 1,0 -2,0',
+        ],
+    },
+    phone: {
+        fill: [
+            'M-3.5,-6.5 L3.5,-6.5 L3.5,5.5 L-3.5,5.5 Z',
+            'M-1,7 L1,7 L1,8 L-1,8 Z',
+        ],
+        stroke: [
+            'M-3.5,-8.5 Q-4.5,-8.5 -4.5,-7.5 L-4.5,7.5 Q-4.5,8.5 -3.5,8.5 L3.5,8.5 Q4.5,8.5 4.5,7.5 L4.5,-7.5 Q4.5,-8.5 3.5,-8.5 Z',
+        ],
+    },
+    internet: {
+        fill: [],
+        stroke: [
+            'M0,-9 A9,9 0 1,0 0.01,-9',
+            'M0,-9 Q-6,0 0,9',
+            'M0,-9 Q6,0 0,9',
+            'M-9,0 L9,0',
+            'M-7.8,-4.5 L7.8,-4.5',
+            'M-7.8,4.5 L7.8,4.5',
+        ],
+    },
+    other: {
+        fill: [
+            'M-8,-7 L8,-7 L8,3 L-8,3 Z',
+            'M-4,5 L4,5 L4,7 L-4,7 Z',
+        ],
+        stroke: [
+            'M0,3 L0,5',
+        ],
+    },
 };
 
 let viewBox = { x: 0, y: 0, w: 1200, h: 800 };
@@ -125,9 +127,6 @@ function initMap() {
     svg = document.getElementById('network-map');
     if (!svg) return;
 
-    // Set initial viewBox
-    svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
-
     // Create layer groups
     linksGroup = createSvgElement('g', { id: 'links-layer' });
     nodesGroup = createSvgElement('g', { id: 'nodes-layer' });
@@ -137,6 +136,9 @@ function initMap() {
     // Render
     renderLinks();
     renderNodes();
+
+    // Auto-fit viewBox to content
+    fitView();
 
     // Event listeners
     svg.addEventListener('mousedown', onMouseDown);
@@ -181,28 +183,32 @@ function renderLinks() {
 }
 
 function renderDeviceIcon(g, device, radius) {
-    const paths = DEVICE_ICONS[device.type] || DEVICE_ICONS.other;
-    const iconScale = radius / 14; // scale to fit inside circle
+    const icon = DEVICE_ICONS[device.type] || DEVICE_ICONS.other;
+    const iconScale = radius / 14;
 
     const iconG = createSvgElement('g', {
         transform: `scale(${iconScale})`,
-        fill: '#fff',
-        stroke: '#fff',
-        'stroke-width': '0.5',
         'stroke-linejoin': 'round',
+        'stroke-linecap': 'round',
     });
 
-    for (const d of paths) {
-        // Detect if path is a line (moveto + lineto only, no area)
-        const isStroke = /^M[^Z]*$/.test(d) && !d.includes('L') || (d.match(/[ML]/g) || []).length <= 2 && !d.includes('Z') && !d.includes('Q') && !d.includes('A');
-        const el = createSvgElement('path', {
+    // Filled shapes
+    for (const d of icon.fill) {
+        iconG.appendChild(createSvgElement('path', {
             d: d,
-            fill: d.includes('Z') || d.includes('A') || d.includes('Q') ? '#fff' : 'none',
+            fill: '#fff',
+            stroke: 'none',
+        }));
+    }
+
+    // Stroked lines/curves
+    for (const d of icon.stroke) {
+        iconG.appendChild(createSvgElement('path', {
+            d: d,
+            fill: 'none',
             stroke: '#fff',
-            'stroke-width': d.includes('Z') ? '0' : '1.5',
-            'stroke-linecap': 'round',
-        });
-        iconG.appendChild(el);
+            'stroke-width': '1.5',
+        }));
     }
 
     g.appendChild(iconG);
@@ -328,6 +334,45 @@ function updateLinkPositions() {
             line.setAttribute('y2', tgt.y);
         }
     }
+}
+
+// ── ViewBox auto-fit ──
+
+function fitView() {
+    if (!MAP_DEVICES || !MAP_DEVICES.length) {
+        viewBox = { x: 0, y: 0, w: 1200, h: 800 };
+        scale = 1;
+        svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+        return;
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const d of MAP_DEVICES) {
+        minX = Math.min(minX, d.x);
+        minY = Math.min(minY, d.y);
+        maxX = Math.max(maxX, d.x);
+        maxY = Math.max(maxY, d.y);
+    }
+
+    const pad = 120;
+    let x = minX - pad;
+    let y = minY - pad;
+    let w = (maxX - minX) + pad * 2;
+    let h = (maxY - minY) + pad * 2;
+
+    // Enforce minimum size
+    if (w < 600) {
+        x -= (600 - w) / 2;
+        w = 600;
+    }
+    if (h < 400) {
+        y -= (400 - h) / 2;
+        h = 400;
+    }
+
+    viewBox = { x, y, w, h };
+    scale = 1;
+    svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
 }
 
 // ── Mouse interactions ──
@@ -475,6 +520,7 @@ async function autoLayout() {
         }
         renderNodes();
         updateLinkPositions();
+        fitView();
     } catch (e) {
         console.error('Auto layout failed:', e);
     }
@@ -503,9 +549,7 @@ function zoomOut() {
 }
 
 function resetView() {
-    viewBox = { x: 0, y: 0, w: 1200, h: 800 };
-    scale = 1;
-    svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+    fitView();
 }
 
 // Initialize when DOM is ready

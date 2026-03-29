@@ -397,16 +397,17 @@ pub async fn auto_layout(State(state): State<AppState>) -> impl IntoResponse {
     let db = state.db.clone();
     let result = tokio::task::spawn_blocking(move || {
         let devices = db.list_devices()?;
-        let links = db.list_links()?;
-        let positions = db.list_positions().unwrap_or_default();
 
-        let device_ids: Vec<String> = devices.iter().map(|d| d.id.clone()).collect();
-        let link_pairs: Vec<(String, String)> = links
+        let device_infos: Vec<crate::topo::DeviceInfo> = devices
             .iter()
-            .map(|l| (l.source_device_id.clone(), l.target_device_id.clone()))
+            .map(|d| crate::topo::DeviceInfo {
+                id: d.id.clone(),
+                device_type: d.device_type.as_str().to_string(),
+                ip: d.ip.clone(),
+            })
             .collect();
 
-        let new_positions = crate::topo::auto_layout(&device_ids, &positions, &link_pairs, 100);
+        let new_positions = crate::topo::hierarchical_place(&device_infos);
 
         for pos in &new_positions {
             let _ = db.upsert_position(pos.clone());
