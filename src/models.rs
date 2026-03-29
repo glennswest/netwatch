@@ -12,6 +12,7 @@ pub enum DeviceType {
     Printer,
     Camera,
     Phone,
+    Internet,
     Other,
 }
 
@@ -26,6 +27,7 @@ impl DeviceType {
             "printer" => Self::Printer,
             "camera" => Self::Camera,
             "phone" => Self::Phone,
+            "internet" => Self::Internet,
             _ => Self::Other,
         }
     }
@@ -40,6 +42,7 @@ impl DeviceType {
             Self::Printer => "printer",
             Self::Camera => "camera",
             Self::Phone => "phone",
+            Self::Internet => "internet",
             Self::Other => "other",
         }
     }
@@ -54,6 +57,7 @@ impl DeviceType {
             Self::Printer => "P",
             Self::Camera => "C",
             Self::Phone => "T",
+            Self::Internet => "I",
             Self::Other => "?",
         }
     }
@@ -68,12 +72,13 @@ impl DeviceType {
             Self::Printer => "#6b7084",
             Self::Camera => "#e5a54b",
             Self::Phone => "#5baae5",
+            Self::Internet => "#43b581",
             Self::Other => "#6b7084",
         }
     }
 
     pub fn is_infrastructure(&self) -> bool {
-        matches!(self, Self::Router | Self::Switch | Self::Firewall | Self::Ap | Self::Server)
+        matches!(self, Self::Router | Self::Switch | Self::Firewall | Self::Ap | Self::Server | Self::Internet)
     }
 }
 

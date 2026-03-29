@@ -37,6 +37,8 @@ pub struct DiscoveryConfig {
     pub scan_ports: Vec<u16>,
     #[serde(default = "default_true")]
     pub auto_add_services: bool,
+    #[serde(default = "default_internet_target")]
+    pub internet_target: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -121,6 +123,7 @@ fn default_probe_days() -> u32 { 30 }
 fn default_metric_days() -> u32 { 90 }
 fn default_alert_days() -> u32 { 180 }
 fn default_true() -> bool { true }
+fn default_internet_target() -> String { "1.1.1.1".into() }
 
 fn default_scan_ports() -> Vec<u16> {
     vec![
@@ -138,6 +141,7 @@ impl Default for DiscoveryConfig {
             snmp_timeout_ms: default_snmp_timeout(),
             scan_ports: default_scan_ports(),
             auto_add_services: true,
+            internet_target: default_internet_target(),
         }
     }
 }

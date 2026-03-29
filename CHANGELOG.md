@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### 2026-03-29
+- **feat:** Internet node — virtual device pinging 1.1.1.1 (configurable) with latency indicator on map
+- **feat:** Internet device auto-links to gateway router on network map
+- **feat:** `internet_target` config option in `[discovery]` section (default: `1.1.1.1`)
+- **feat:** All discovered devices now get ICMP Ping monitoring (not just infrastructure)
+- **feat:** Map shows Unknown-status devices (gray ring) — no longer hidden until first probe
+- **feat:** New `Internet` device type with globe icon and green/teal color (#43b581)
+- **fix:** Devices classified as "Other" were invisible — no ICMP service, `monitor=false` label, status stuck on Unknown
+- **fix:** Removed `monitor=false` label from non-infrastructure devices
+- **feat:** Redesigned all SVG device icons — router (directional arrows), switch (wide chassis with ports), server (rack units with LEDs), firewall (shield with checkmark), AP (WiFi arcs), printer, camera (dome), phone, internet (globe with grid), other (monitor)
+
 ### 2026-03-28
 - **fix:** Ping sweep connected sockets — each ping uses connect() to filter replies to target IP only
 - **fix:** ICMP reply handling — retry loop handles destination-unreachable (type 3) and skips non-matching responses

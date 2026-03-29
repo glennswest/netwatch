@@ -25,6 +25,9 @@ pub async fn run(
         tracing::warn!("discovery: gateway subnet discovery failed: {}", e);
     }
 
+    // Create Internet virtual device if it doesn't exist
+    ensure_internet_device(&db, &config);
+
     let interval_secs = config.discovery.interval_secs;
     let mut first_run = true;
 
@@ -66,6 +69,9 @@ pub async fn run(
         if let Err(e) = discover_neighbors(&db, &config).await {
             tracing::error!("discovery: neighbor detection error: {}", e);
         }
+
+        // Link Internet device to gateway router
+        link_internet_to_gateway(&db);
 
         let _ = ws_tx.send(r#"{"event":"discovery_complete"}"#.to_string());
     }
@@ -397,9 +403,6 @@ async fn scan_subnet(
         let is_infrastructure = device_type.is_infrastructure();
 
         let mut labels = std::collections::HashMap::new();
-        if !is_infrastructure {
-            labels.insert("monitor".to_string(), "false".to_string());
-        }
         if let Some(ref v) = vendor {
             labels.insert("vendor".to_string(), v.to_lowercase());
         }
@@ -437,8 +440,8 @@ async fn scan_subnet(
 
         tracing::info!("discovery: found {} {} ({})", type_str, ip_str, device_id);
 
-        // Only add monitoring services for infrastructure devices
-        if auto_add && is_infrastructure {
+        // All discovered devices get ICMP monitoring (they responded to ping)
+        if auto_add {
             let svc = Service {
                 id: uuid::Uuid::new_v4().to_string(),
                 device_id: device_id.clone(),
@@ -731,6 +734,87 @@ async fn discover_neighbors(db: &Db, config: &Config) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Create the Internet virtual device and its ICMP service if not already present.
+fn ensure_internet_device(db: &Db, config: &Config) {
+    // Check if an Internet device already exists
+    if let Ok(devices) = db.list_devices() {
+        if devices.iter().any(|d| d.device_type == DeviceType::Internet) {
+            return;
+        }
+    }
+
+    let target = &config.discovery.internet_target;
+    let now = chrono::Utc::now().to_rfc3339();
+    let device_id = uuid::Uuid::new_v4().to_string();
+
+    let device = Device {
+        id: device_id.clone(),
+        ip: target.clone(),
+        additional_ips: Vec::new(),
+        name: "Internet".to_string(),
+        mac: None,
+        vendor: None,
+        device_type: DeviceType::Internet,
+        snmp_community: None,
+        snmp_version: 0,
+        sys_descr: None,
+        sys_object_id: None,
+        location: None,
+        notes: None,
+        labels: std::collections::HashMap::new(),
+        enabled: true,
+        last_seen: None,
+        snmp_reachable: None,
+        snmp_last_checked: None,
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    if let Err(e) = db.insert_device(device) {
+        tracing::warn!("discovery: failed to create Internet device: {}", e);
+        return;
+    }
+
+    // Add ICMP service for the internet target
+    let svc = Service {
+        id: uuid::Uuid::new_v4().to_string(),
+        device_id,
+        name: "Ping".to_string(),
+        probe_type: ProbeType::Icmp,
+        host: Some(target.clone()),
+        port: None,
+        url: None,
+        interval_secs: 60,
+        timeout_ms: 5000,
+        enabled: true,
+    };
+    let _ = db.insert_service(svc);
+    tracing::info!("discovery: created Internet device targeting {}", target);
+}
+
+/// Link the Internet device to the gateway router (if both exist).
+fn link_internet_to_gateway(db: &Db) {
+    let devices = match db.list_devices() {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+
+    let internet = match devices.iter().find(|d| d.device_type == DeviceType::Internet) {
+        Some(d) => d,
+        None => return,
+    };
+
+    // Find the gateway — typically a router at .1 on any subnet
+    let gateway = match read_default_gateway() {
+        Some(gw_ip) => devices.iter().find(|d| d.ip == gw_ip || d.additional_ips.contains(&gw_ip)),
+        None => None,
+    };
+
+    if let Some(gw) = gateway {
+        ensure_link(db, gw, internet);
+    }
 }
 
 // ── Utility functions ──

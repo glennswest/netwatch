@@ -12,70 +12,104 @@ const STATUS_COLORS = {
 // SVG icon paths for each device type, designed for a 48x48 viewBox centered at 0,0
 const DEVICE_ICONS = {
     router: [
-        // Two curved arrows (routing symbol)
-        'M-3,-8 L3,-8 L3,-4 L-3,-4 Z',
-        'M-3,4 L3,4 L3,8 L-3,8 Z',
-        'M-8,-3 L-4,-3 L-4,3 L-8,3 Z',
-        'M4,-3 L8,-3 L8,3 L4,3 Z',
-        'M-1,-4 L1,-4 L1,4 L-1,4 Z',
-        'M-4,-1 L4,-1 L4,1 L-4,1 Z',
+        // Center dot with 4 directional arrows
+        'M-1.5,-1.5 L1.5,-1.5 L1.5,1.5 L-1.5,1.5 Z',
+        // Up arrow
+        'M-1,-3 L0,-6 L1,-3 Z', 'M-0.5,-3 L-0.5,-8 L0.5,-8 L0.5,-3 Z',
+        // Down arrow
+        'M-1,3 L0,6 L1,3 Z', 'M-0.5,3 L-0.5,8 L0.5,8 L0.5,3 Z',
+        // Left arrow
+        'M-3,-1 L-6,0 L-3,1 Z', 'M-3,-0.5 L-8,-0.5 L-8,0.5 L-3,0.5 Z',
+        // Right arrow
+        'M3,-1 L6,0 L3,1 Z', 'M3,-0.5 L8,-0.5 L8,0.5 L3,0.5 Z',
     ],
     switch: [
-        // Horizontal box with port indicators
-        'M-9,-4 L9,-4 L9,4 L-9,4 Z',
-        'M-7,-2 L-5,-2 L-5,0 L-7,0 Z',
-        'M-3,-2 L-1,-2 L-1,0 L-3,0 Z',
-        'M1,-2 L3,-2 L3,0 L1,0 Z',
-        'M5,-2 L7,-2 L7,0 L5,0 Z',
-        'M6,1 L7,1 L7,2.5 L6,2.5 Z',
+        // Wide chassis
+        'M-10,-3.5 L10,-3.5 L10,3.5 L-10,3.5 Z',
+        // Port row (6 ports)
+        'M-8,-1.5 L-6,-1.5 L-6,0.5 L-8,0.5 Z',
+        'M-4.5,-1.5 L-2.5,-1.5 L-2.5,0.5 L-4.5,0.5 Z',
+        'M-1,-1.5 L1,-1.5 L1,0.5 L-1,0.5 Z',
+        'M2.5,-1.5 L4.5,-1.5 L4.5,0.5 L2.5,0.5 Z',
+        'M6,-1.5 L8,-1.5 L8,0.5 L6,0.5 Z',
+        // Status LED
+        'M7.5,1.5 L8.5,1.5 L8.5,2.5 L7.5,2.5 Z',
     ],
     server: [
-        // Stacked rack units
-        'M-6,-8 L6,-8 L6,-3 L-6,-3 Z',
-        'M-6,-2 L6,-2 L6,3 L-6,3 Z',
-        'M-6,4 L6,4 L6,8 L-6,8 Z',
-        'M-4,-6.5 L-3,-6.5 L-3,-4.5 L-4,-4.5 Z',
-        'M-4,-0.5 L-3,-0.5 L-3,1.5 L-4,1.5 Z',
-        'M-4,5.5 L-3,5.5 L-3,6.5 L-4,6.5 Z',
+        // Stacked rack units with rounded feel
+        'M-7,-8 L7,-8 L7,-3.5 L-7,-3.5 Z',
+        'M-7,-2.5 L7,-2.5 L7,2 L-7,2 Z',
+        'M-7,3 L7,3 L7,7.5 L-7,7.5 Z',
+        // Drive indicators
+        'M-5,-6.5 L-3.5,-6.5 L-3.5,-5 L-5,-5 Z',
+        'M-5,-1 L-3.5,-1 L-3.5,0.5 L-5,0.5 Z',
+        'M-5,4.5 L-3.5,4.5 L-3.5,6 L-5,6 Z',
+        // Power LED per unit
+        'M5,-6 L5.8,-6 L5.8,-5.2 L5,-5.2 Z',
+        'M5,-0.5 L5.8,-0.5 L5.8,0.3 L5,0.3 Z',
+        'M5,5 L5.8,5 L5.8,5.8 L5,5.8 Z',
     ],
     firewall: [
-        // Shield shape
-        'M0,-9 L8,-5.5 L8,1 Q8,7 0,9.5 Q-8,7 -8,1 L-8,-5.5 Z',
-        // Inner line
-        'M0,-5 L0,6',
-        'M-4,-3 L4,-3',
+        // Shield outline
+        'M0,-9 L7.5,-5.5 L7.5,1 Q7.5,7 0,9.5 Q-7.5,7 -7.5,1 L-7.5,-5.5 Z',
+        // Checkmark inside shield
+        'M-3,0.5 L-0.5,3 L4,-2.5',
     ],
     ap: [
-        // Radio tower with waves
-        'M-1,3 L1,3 L2,8 L-2,8 Z',
+        // Base
+        'M-1.5,5 L1.5,5 L2.5,8 L-2.5,8 Z',
         'M-4,8 L4,8 L4,9 L-4,9 Z',
-        'M0,3 L0,-2',
-        // Waves (arcs)
-        'M-4,-2 Q0,-7 4,-2',
-        'M-7,-1 Q0,-9 7,-1',
+        // Antenna
+        'M0,5 L0,1',
+        // WiFi arcs
+        'M-3,0 Q0,-4 3,0',
+        'M-5.5,-1 Q0,-7 5.5,-1',
+        'M-8,-2 Q0,-10 8,-2',
     ],
     printer: [
-        // Paper tray + body
-        'M-4,-7 L4,-7 L4,-3 L-4,-3 Z',
-        'M-7,-3 L7,-3 L7,3 L-7,3 Z',
-        'M-4,3 L4,3 L4,7 L-4,7 Z',
-        'M4,-1 L6,-1 L6,1 L4,1 Z',
+        // Paper coming out top
+        'M-4,-8 L4,-8 L4,-4 L-4,-4 Z',
+        // Printer body
+        'M-7,-4 L7,-4 L7,3 L-7,3 Z',
+        // Paper tray bottom
+        'M-5,3 L5,3 L5,7 L-5,7 Z',
+        // Button/LED
+        'M5,-2 L6.5,-2 L6.5,-0.5 L5,-0.5 Z',
     ],
     camera: [
-        // Camera body + lens
-        'M-7,-4 L4,-4 L4,4 L-7,4 Z',
-        'M4,-2.5 L8,-5 L8,5 L4,2.5 Z',
+        // Dome camera base
+        'M-8,2 L8,2 L8,4 L-8,4 Z',
+        // Dome
+        'M-6,2 Q-6,-6 0,-7 Q6,-6 6,2 Z',
+        // Lens
+        'M-2,0 A2,2 0 1,0 2,0 A2,2 0 1,0 -2,0 Z',
     ],
     phone: [
-        // Smartphone
-        'M-3,-8 L3,-8 Q4,-8 4,-7 L4,7 Q4,8 3,8 L-3,8 Q-4,8 -4,7 L-4,-7 Q-4,-8 -3,-8 Z',
-        'M-3,-6 L3,-6 L3,5 L-3,5 Z',
+        // Smartphone outline
+        'M-3.5,-8.5 Q-4.5,-8.5 -4.5,-7.5 L-4.5,7.5 Q-4.5,8.5 -3.5,8.5 L3.5,8.5 Q4.5,8.5 4.5,7.5 L4.5,-7.5 Q4.5,-8.5 3.5,-8.5 Z',
+        // Screen
+        'M-3.5,-6.5 L3.5,-6.5 L3.5,5.5 L-3.5,5.5 Z',
+        // Home button
+        'M-1,7 L1,7 L1,8 L-1,8 Z',
+    ],
+    internet: [
+        // Globe circle
+        'M0,-9 A9,9 0 1,0 0.01,-9 Z',
+        // Longitude lines
+        'M0,-9 Q-6,0 0,9', 'M0,-9 Q6,0 0,9',
+        // Latitude lines
+        'M-9,0 L9,0',
+        'M-7.8,-4.5 L7.8,-4.5',
+        'M-7.8,4.5 L7.8,4.5',
     ],
     other: [
-        // Circle with question mark
-        'M0,-9 A9,9 0 1,0 0.01,-9 Z',
-        'M-2,-3 Q-2,-6 0,-6 Q2,-6 2,-3 Q2,-1 0,0 L0,2',
-        'M-0.8,4 L0.8,4 L0.8,5.5 L-0.8,5.5 Z',
+        // Monitor screen
+        'M-8,-7 L8,-7 L8,4 L-8,4 Z',
+        // Screen inner
+        'M-6.5,-5.5 L6.5,-5.5 L6.5,2.5 L-6.5,2.5 Z',
+        // Stand
+        'M-2,4 L2,4 L2,6 L-2,6 Z',
+        'M-4,6 L4,6 L4,7.5 L-4,7.5 Z',
     ],
 };
 

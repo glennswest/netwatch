@@ -453,7 +453,7 @@ pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
     .unwrap();
 
     let mut map_devices = Vec::new();
-    for ds in statuses.iter().filter(|ds| ds.status == ProbeStatus::Up || ds.status == ProbeStatus::Degraded) {
+    for ds in statuses.iter().filter(|ds| ds.status != ProbeStatus::Down) {
         let pos = positions
             .iter()
             .find(|p| p.device_id == ds.device.id)
