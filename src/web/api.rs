@@ -55,6 +55,7 @@ pub async fn create_device(
         notes: req.notes,
         labels: std::collections::HashMap::new(),
         enabled: true,
+        is_virtual: req.is_virtual.unwrap_or(false),
         last_seen: None,
         snmp_reachable: None,
         snmp_last_checked: None,
@@ -100,6 +101,7 @@ pub async fn update_device(
     if let Some(l) = req.location { new.location = Some(l); }
     if let Some(n) = req.notes { new.notes = Some(n); }
     if let Some(e) = req.enabled { new.enabled = e; }
+    if let Some(v) = req.is_virtual { new.is_virtual = v; }
     new.updated_at = chrono::Utc::now().to_rfc3339();
 
     match state.db.update_device(old, new.clone()) {

@@ -14,6 +14,10 @@
 - **feat:** UpdateDevice API now supports `additional_ips` field for multi-homed device management
 - **fix:** Merged duplicate rose1 device (192.168.216.1 consolidated into rose1 at 192.168.9.1)
 - **fix:** Removed 5 bogus/duplicate LLDP links from duplicate rose1 device
+- **feat:** `is_virtual` boolean field on Device — distinguishes physical switches (configman backups) from virtual bridges
+- **fix:** Reclassified router.gw.lo (192.168.1.254) as switch1.gw.lo (Switch type)
+- **feat:** Created virtual bridge.gt.lo (rose1 internal bridge for g200/gt network)
+- **feat:** Created virtual switch8.gw.lo (rose1 internal bridge for g8 network)
 
 ## [v0.4.0] — 2026-03-29
 

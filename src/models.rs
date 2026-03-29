@@ -238,6 +238,8 @@ pub struct Device {
     #[serde(default)]
     pub labels: std::collections::HashMap<String, String>,
     pub enabled: bool,
+    #[serde(default)]
+    pub is_virtual: bool,
     pub last_seen: Option<String>,
     #[serde(default)]
     pub snmp_reachable: Option<bool>,
@@ -419,6 +421,7 @@ pub struct CreateDevice {
     pub snmp_community: Option<String>,
     pub location: Option<String>,
     pub notes: Option<String>,
+    pub is_virtual: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -432,6 +435,7 @@ pub struct UpdateDevice {
     pub location: Option<String>,
     pub notes: Option<String>,
     pub enabled: Option<bool>,
+    pub is_virtual: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
