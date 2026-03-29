@@ -18,7 +18,10 @@
 - **fix:** Reclassified router.gw.lo (192.168.1.254) as switch1.gw.lo (Switch type)
 - **feat:** Created virtual bridge.gt.lo (rose1 internal bridge for g200/gt network)
 - **feat:** Created virtual switch8.gw.lo (rose1 internal bridge for g8 network)
-- **feat:** Split rose1 multi-homed device into physical rose1.gw.lo (192.168.9.1) + 5 virtual routers per subnet gateway (gw, g10, g11, g88, g216)
+- **feat:** Split rose1 multi-homed device into physical rose1.gw.lo + virtual routers per subnet (g8, g9, g10, g11, g88, g216, gt)
+- **feat:** Master rose1 device as central hub — all virtual subnet bridges connect to it
+- **fix:** LLDP discovery skips virtual devices — prevents bogus cross-links between virtual bridges
+- **fix:** Multi-homed consolidation skips virtual devices — prevents discovery from merging IPs into manually-curated devices
 
 ## [v0.4.0] — 2026-03-29
 

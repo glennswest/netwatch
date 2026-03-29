@@ -353,9 +353,14 @@ async fn scan_subnet(
         }
 
         // Multi-homed consolidation: if SNMP sysName matches an existing device,
-        // add this IP as an additional_ip instead of creating a new device
+        // add this IP as an additional_ip instead of creating a new device.
+        // Skip virtual devices — they have manually-curated IPs.
         if snmp_reachable && name != ip_str {
             if let Ok(Some(existing)) = db.get_device_by_name(&name) {
+                if existing.is_virtual {
+                    // Don't consolidate into virtual devices — they're manually managed
+                    continue;
+                }
                 if existing.ip != ip_str && !existing.additional_ips.contains(&ip_str) {
                     let mut updated = existing.clone();
                     updated.additional_ips.push(ip_str.clone());
@@ -659,7 +664,11 @@ fn find_subnet_switch<'a>(ip: &str, devices: &'a [Device]) -> Option<&'a Device>
 }
 
 /// Create a link between two devices if one doesn't already exist.
+/// Skips if either device is virtual (virtual device links are manually curated).
 fn ensure_link(db: &Db, source: &Device, target: &Device) {
+    if source.is_virtual || target.is_virtual {
+        return;
+    }
     let links = match db.list_links() {
         Ok(l) => l,
         Err(_) => return,
@@ -691,6 +700,13 @@ async fn discover_neighbors(db: &Db, config: &Config) -> Result<()> {
     let timeout = config.discovery.snmp_timeout_ms;
 
     for device in &devices {
+        // Skip virtual devices — their links are manually curated.
+        // LLDP on virtual bridge IPs returns the parent device's neighbor table,
+        // which creates bogus cross-links between all virtual bridges.
+        if device.is_virtual {
+            continue;
+        }
+
         let community = device
             .snmp_community
             .as_deref()
