@@ -1,28 +1,39 @@
-//! Topology layout — hierarchical placement for the network map.
+//! Topology layout — columnar subnet placement for the network map.
+//!
+//! Layout structure:
+//!   Internet (top center)
+//!       |
+//!   Routers (centered)
+//!       |
+//!   ┌────┬────┬────┬────┐
+//!   sw9  sw10 sw11  ...    ← subnet switch headers
+//!   │    │    │    │
+//!   dev  dev  dev  dev     ← devices in grid rows (COLS_PER_ROW wide)
+//!   dev  dev  dev  dev
+//!   ...
+//!
+//! Each /24 subnet gets a vertical column with its switch on top
+//! and devices stacked in rows below.
 
 use crate::models::MapPosition;
 use std::collections::BTreeMap;
 
 const PADDING: f64 = 60.0;
-const TIER_Y: [f64; 5] = [80.0, 250.0, 420.0, 590.0, 760.0];
 const NODE_SPACING: f64 = 130.0;
-const GROUP_GAP: f64 = 80.0;
+const ROW_SPACING: f64 = 100.0;
+const COL_GAP: f64 = 100.0;
+const COLS_PER_ROW: usize = 4;
+
+const INTERNET_Y: f64 = 80.0;
+const ROUTER_Y: f64 = 230.0;
+const SWITCH_Y: f64 = 400.0;
+const DEVICES_START_Y: f64 = 550.0;
 
 /// Minimal device info needed for hierarchical placement.
 pub struct DeviceInfo {
     pub id: String,
     pub device_type: String,
     pub ip: String,
-}
-
-fn tier_for_type(device_type: &str) -> usize {
-    match device_type {
-        "internet" => 0,
-        "router" => 1,
-        "switch" => 2,
-        "ap" | "firewall" | "server" => 3,
-        _ => 4,
-    }
 }
 
 fn subnet_key(ip: &str) -> String {
@@ -34,92 +45,126 @@ fn subnet_key(ip: &str) -> String {
     }
 }
 
-/// Hierarchical layout: devices organized by network role tier and /24 subnet.
-///
-/// Tier 0 (y=80):  Internet
-/// Tier 1 (y=250): Routers
-/// Tier 2 (y=420): Switches
-/// Tier 3 (y=590): APs, Firewalls, Servers
-/// Tier 4 (y=760): Cameras, Phones, Printers, Other
-///
-/// Within each tier, devices are grouped by /24 subnet with 80px gaps between groups
-/// and 130px spacing between nodes.
+/// Columnar layout: each /24 subnet gets a vertical column with its switch
+/// on top and devices stacked in rows of [COLS_PER_ROW] below.
+/// Internet and routers are centered above all columns.
 pub fn hierarchical_place(devices: &[DeviceInfo]) -> Vec<MapPosition> {
     if devices.is_empty() {
         return vec![];
     }
 
-    // Assign devices to tiers
-    let mut tiers: Vec<Vec<&DeviceInfo>> = vec![vec![]; 5];
-    for dev in devices {
-        let tier = tier_for_type(&dev.device_type);
-        tiers[tier].push(dev);
-    }
-
     let mut results = Vec::new();
 
-    for (tier_idx, tier_devices) in tiers.iter().enumerate() {
-        if tier_devices.is_empty() {
-            continue;
+    // ── Categorize devices ──
+    let mut internet_devs: Vec<&DeviceInfo> = Vec::new();
+    let mut router_devs: Vec<&DeviceInfo> = Vec::new();
+    let mut subnet_map: BTreeMap<String, Vec<&DeviceInfo>> = BTreeMap::new();
+
+    for dev in devices {
+        match dev.device_type.as_str() {
+            "internet" => internet_devs.push(dev),
+            "router" => router_devs.push(dev),
+            _ => {
+                subnet_map.entry(subnet_key(&dev.ip)).or_default().push(dev);
+            }
         }
+    }
 
-        let y = TIER_Y[tier_idx];
+    // ── Layout subnet columns ──
+    // Each column: switch header on top, devices in grid rows below.
+    // Columns are sized to their content width and spaced with COL_GAP.
 
-        // Group by /24 subnet, sorted by subnet key
-        let mut subnet_groups: BTreeMap<String, Vec<&DeviceInfo>> = BTreeMap::new();
-        for dev in tier_devices {
-            subnet_groups.entry(subnet_key(&dev.ip)).or_default().push(dev);
-        }
+    let mut col_x = 0.0_f64;
 
-        // Flatten into ordered list tracking group boundaries
-        let mut ordered: Vec<(&DeviceInfo, bool)> = Vec::new(); // (device, starts_new_group)
-        for (i, (_key, group)) in subnet_groups.iter().enumerate() {
-            for (j, dev) in group.iter().enumerate() {
-                ordered.push((dev, j == 0 && i > 0));
+    for (_subnet_key, group) in &subnet_map {
+        // Separate switch (column header) from other devices
+        let mut header: Option<&DeviceInfo> = None;
+        let mut regular: Vec<&DeviceInfo> = Vec::new();
+        for dev in group {
+            if header.is_none() && dev.device_type == "switch" {
+                header = Some(dev);
+            } else {
+                regular.push(dev);
             }
         }
 
-        if ordered.is_empty() {
-            continue;
+        // Column width based on actual content (or 0 for single-device columns)
+        let row_count = regular.len().min(COLS_PER_ROW);
+        let col_width = if row_count > 1 {
+            (row_count as f64 - 1.0) * NODE_SPACING
+        } else {
+            0.0
+        };
+        let center_x = col_x + col_width / 2.0;
+
+        // Place switch header centered in column
+        if let Some(h) = header {
+            results.push(MapPosition {
+                device_id: h.id.clone(),
+                x: round1(center_x),
+                y: SWITCH_Y,
+            });
         }
 
-        // Calculate total width
-        let mut total_width = 0.0_f64;
-        for (i, &(_, new_group)) in ordered.iter().enumerate() {
-            if i > 0 {
-                total_width += NODE_SPACING;
-                if new_group {
-                    total_width += GROUP_GAP;
-                }
-            }
-        }
-
-        // Place centered at x=0
-        let mut x = -total_width / 2.0;
-        for (i, &(dev, new_group)) in ordered.iter().enumerate() {
-            if i > 0 {
-                x += NODE_SPACING;
-                if new_group {
-                    x += GROUP_GAP;
-                }
-            }
+        // Place devices in grid rows
+        for (i, dev) in regular.iter().enumerate() {
+            let row = i / COLS_PER_ROW;
+            let col = i % COLS_PER_ROW;
+            let x = col_x + col as f64 * NODE_SPACING;
+            let y = DEVICES_START_Y + row as f64 * ROW_SPACING;
             results.push(MapPosition {
                 device_id: dev.id.clone(),
-                x: (x * 10.0).round() / 10.0,
-                y,
+                x: round1(x),
+                y: round1(y),
+            });
+        }
+
+        col_x += col_width + COL_GAP;
+    }
+
+    // ── Center Internet and routers over columns ──
+    let total_width = if col_x > COL_GAP { col_x - COL_GAP } else { 0.0 };
+    let columns_center = total_width / 2.0;
+
+    // Internet
+    if !internet_devs.is_empty() {
+        let w = (internet_devs.len() as f64 - 1.0) * NODE_SPACING;
+        let start_x = columns_center - w / 2.0;
+        for (i, dev) in internet_devs.iter().enumerate() {
+            results.push(MapPosition {
+                device_id: dev.id.clone(),
+                x: round1(start_x + i as f64 * NODE_SPACING),
+                y: INTERNET_Y,
             });
         }
     }
 
-    // Shift all positions so minimum x = PADDING
+    // Routers
+    if !router_devs.is_empty() {
+        let w = (router_devs.len() as f64 - 1.0) * NODE_SPACING;
+        let start_x = columns_center - w / 2.0;
+        for (i, dev) in router_devs.iter().enumerate() {
+            results.push(MapPosition {
+                device_id: dev.id.clone(),
+                x: round1(start_x + i as f64 * NODE_SPACING),
+                y: ROUTER_Y,
+            });
+        }
+    }
+
+    // ── Shift so minimum x = PADDING ──
     if let Some(min_x) = results.iter().map(|p| p.x).reduce(f64::min) {
         let shift = PADDING - min_x;
         for pos in &mut results {
-            pos.x += shift;
+            pos.x = round1(pos.x + shift);
         }
     }
 
     results
+}
+
+fn round1(v: f64) -> f64 {
+    (v * 10.0).round() / 10.0
 }
 
 /// Place a single new device near an existing device (for when new devices are discovered).
