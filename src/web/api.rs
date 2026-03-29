@@ -93,6 +93,7 @@ pub async fn update_device(
     let mut new = old.clone();
     if let Some(name) = req.name { new.name = name; }
     if let Some(ip) = req.ip { new.ip = ip; }
+    if let Some(ips) = req.additional_ips { new.additional_ips = ips; }
     if let Some(mac) = req.mac { new.mac = Some(mac); }
     if let Some(dt) = req.device_type { new.device_type = DeviceType::parse(&dt); }
     if let Some(c) = req.snmp_community { new.snmp_community = Some(c); }

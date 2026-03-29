@@ -425,6 +425,7 @@ pub struct CreateDevice {
 pub struct UpdateDevice {
     pub name: Option<String>,
     pub ip: Option<String>,
+    pub additional_ips: Option<Vec<String>>,
     pub mac: Option<String>,
     pub device_type: Option<String>,
     pub snmp_community: Option<String>,

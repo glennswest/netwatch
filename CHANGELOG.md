@@ -11,6 +11,9 @@
 - **fix:** WiFi arcs, globe longitude curves, camera dome correctly stroked instead of filled
 - **fix:** "Reset View" button now fits to content instead of hardcoded 1200x800
 - **fix:** "Auto Layout" uses columnar subnet placement instead of force-directed (better for network topologies)
+- **feat:** UpdateDevice API now supports `additional_ips` field for multi-homed device management
+- **fix:** Merged duplicate rose1 device (192.168.216.1 consolidated into rose1 at 192.168.9.1)
+- **fix:** Removed 5 bogus/duplicate LLDP links from duplicate rose1 device
 
 ## [v0.4.0] — 2026-03-29
 
