@@ -77,33 +77,43 @@ pub fn hierarchical_place(devices: &[DeviceInfo]) -> Vec<MapPosition> {
     let mut col_x = 0.0_f64;
 
     for (_subnet_key, group) in &subnet_map {
-        // Separate switch (column header) from other devices
-        let mut header: Option<&DeviceInfo> = None;
+        // Separate switches/APs (column header row) from other devices
+        let mut headers: Vec<&DeviceInfo> = Vec::new();
         let mut regular: Vec<&DeviceInfo> = Vec::new();
         for dev in group {
-            if header.is_none() && dev.device_type == "switch" {
-                header = Some(dev);
+            if dev.device_type == "switch" || dev.device_type == "ap" {
+                headers.push(dev);
             } else {
                 regular.push(dev);
             }
         }
 
-        // Column width based on actual content (or 0 for single-device columns)
-        let row_count = regular.len().min(COLS_PER_ROW);
-        let col_width = if row_count > 1 {
-            (row_count as f64 - 1.0) * NODE_SPACING
+        // Column width based on whichever row is wider: headers or device grid
+        let grid_cols = regular.len().min(COLS_PER_ROW);
+        let header_width = if headers.len() > 1 {
+            (headers.len() as f64 - 1.0) * NODE_SPACING
         } else {
             0.0
         };
+        let grid_width = if grid_cols > 1 {
+            (grid_cols as f64 - 1.0) * NODE_SPACING
+        } else {
+            0.0
+        };
+        let col_width = header_width.max(grid_width);
         let center_x = col_x + col_width / 2.0;
 
-        // Place switch header centered in column
-        if let Some(h) = header {
-            results.push(MapPosition {
-                device_id: h.id.clone(),
-                x: round1(center_x),
-                y: SWITCH_Y,
-            });
+        // Place switches/APs centered in column at SWITCH_Y
+        if !headers.is_empty() {
+            let hw = (headers.len() as f64 - 1.0) * NODE_SPACING;
+            let start_x = center_x - hw / 2.0;
+            for (i, h) in headers.iter().enumerate() {
+                results.push(MapPosition {
+                    device_id: h.id.clone(),
+                    x: round1(start_x + i as f64 * NODE_SPACING),
+                    y: SWITCH_Y,
+                });
+            }
         }
 
         // Place devices in grid rows

@@ -13,6 +13,7 @@ pub enum DeviceType {
     Camera,
     Phone,
     Internet,
+    Container,
     Other,
 }
 
@@ -28,6 +29,7 @@ impl DeviceType {
             "camera" => Self::Camera,
             "phone" => Self::Phone,
             "internet" => Self::Internet,
+            "container" => Self::Container,
             _ => Self::Other,
         }
     }
@@ -43,6 +45,7 @@ impl DeviceType {
             Self::Camera => "camera",
             Self::Phone => "phone",
             Self::Internet => "internet",
+            Self::Container => "container",
             Self::Other => "other",
         }
     }
@@ -58,6 +61,7 @@ impl DeviceType {
             Self::Camera => "C",
             Self::Phone => "T",
             Self::Internet => "I",
+            Self::Container => "D",
             Self::Other => "?",
         }
     }
@@ -73,6 +77,7 @@ impl DeviceType {
             Self::Camera => "#e5a54b",
             Self::Phone => "#5baae5",
             Self::Internet => "#43b581",
+            Self::Container => "#26a69a",
             Self::Other => "#6b7084",
         }
     }

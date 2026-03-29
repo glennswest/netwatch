@@ -24,6 +24,8 @@
 - **fix:** Multi-homed consolidation skips virtual devices — prevents discovery from merging IPs into manually-curated devices
 - **fix:** Gateway auto-detection picks lowest RFC1918 IP from SNMP ipAddrTable — avoids using virtual bridge IPs as canonical gateway
 - **feat:** Master `rose1` device as central hub with per-subnet virtual routers (rose1.gw.lo, rose1.g8.lo, rose1.g9.lo, rose1.g10.lo, rose1.g11.lo, rose1.g88.lo, rose1.g216.lo, rose1.gt.lo)
+- **feat:** `Container` device type with distinct icon (box with cargo blocks) and teal color (#26a69a)
+- **fix:** APs placed at switch tier (y=400) alongside switches instead of buried in device grid — shorter link lines to switch
 
 ## [v0.4.0] — 2026-03-29
 
