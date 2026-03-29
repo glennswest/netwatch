@@ -400,6 +400,7 @@ pub async fn auto_layout(State(state): State<AppState>) -> impl IntoResponse {
     let db = state.db.clone();
     let result = tokio::task::spawn_blocking(move || {
         let devices = db.list_devices()?;
+        let links = db.list_links()?;
 
         let device_infos: Vec<crate::topo::DeviceInfo> = devices
             .iter()
@@ -410,7 +411,15 @@ pub async fn auto_layout(State(state): State<AppState>) -> impl IntoResponse {
             })
             .collect();
 
-        let new_positions = crate::topo::hierarchical_place(&device_infos);
+        let link_infos: Vec<crate::topo::LinkInfo> = links
+            .iter()
+            .map(|l| crate::topo::LinkInfo {
+                source_id: l.source_device_id.clone(),
+                target_id: l.target_device_id.clone(),
+            })
+            .collect();
+
+        let new_positions = crate::topo::hierarchical_place(&device_infos, &link_infos);
 
         for pos in &new_positions {
             let _ = db.upsert_position(pos.clone());

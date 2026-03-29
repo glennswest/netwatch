@@ -477,7 +477,14 @@ pub async fn map(State(state): State<AppState>) -> impl IntoResponse {
         .collect();
 
     if !unpositioned.is_empty() {
-        let new_positions = crate::topo::hierarchical_place(&unpositioned);
+        let link_infos: Vec<crate::topo::LinkInfo> = links
+            .iter()
+            .map(|l| crate::topo::LinkInfo {
+                source_id: l.source_device_id.clone(),
+                target_id: l.target_device_id.clone(),
+            })
+            .collect();
+        let new_positions = crate::topo::hierarchical_place(&unpositioned, &link_infos);
         // Save computed positions to DB so they persist across reloads
         let save_positions = new_positions.clone();
         tokio::task::spawn_blocking(move || {
