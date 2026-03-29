@@ -79,7 +79,7 @@ pub async fn run(
 
 /// Discover subnets by SNMP-walking the default gateway's IP address table.
 pub async fn discover_gateway_subnets(db: &Db, config: &Config) -> Result<()> {
-    let gateway = match read_default_gateway() {
+    let route_gw = match read_default_gateway() {
         Some(gw) => gw,
         None => {
             tracing::warn!("discovery: cannot determine default gateway");
@@ -87,18 +87,37 @@ pub async fn discover_gateway_subnets(db: &Db, config: &Config) -> Result<()> {
         }
     };
 
-    tracing::info!("discovery: querying gateway {} for subnets via SNMP", gateway);
     let community = &config.discovery.snmp_community;
     let timeout = config.discovery.snmp_timeout_ms;
 
-    // Walk IP addresses on the router
+    // Walk IP addresses on the router (using the route gateway to connect)
     let addrs = snmp::async_snmp_walk(
-        gateway.clone(),
+        route_gw.clone(),
         community.clone(),
         snmp::OID_IP_ADDR_ENTRY_ADDR.to_string(),
         timeout,
     )
     .await?;
+
+    // Pick the lowest RFC1918 IP on the gateway as the canonical address.
+    // Multi-homed routers (like MikroTik) have many IPs across subnets —
+    // the lowest is typically the primary/physical management interface.
+    let gateway = {
+        let mut lowest: Option<Ipv4Addr> = None;
+        for (_oid, val) in &addrs {
+            let ip_str = val.as_string();
+            if let Ok(ip) = ip_str.parse::<Ipv4Addr>() {
+                if is_rfc1918(&ip_str) {
+                    if lowest.is_none() || ip < lowest.unwrap() {
+                        lowest = Some(ip);
+                    }
+                }
+            }
+        }
+        lowest.map(|ip| ip.to_string()).unwrap_or(route_gw)
+    };
+
+    tracing::info!("discovery: querying gateway {} for subnets via SNMP", gateway);
 
     // Walk subnet masks
     let masks = snmp::async_snmp_walk(
@@ -128,14 +147,7 @@ pub async fn discover_gateway_subnets(db: &Db, config: &Config) -> Result<()> {
         if ip_str.starts_with("127.") || ip_str.starts_with("169.254.") {
             continue;
         }
-        // Only scan RFC1918 private networks
-        if !ip_str.starts_with("10.")
-            && !ip_str.starts_with("172.16.") && !ip_str.starts_with("172.17.")
-            && !ip_str.starts_with("172.18.") && !ip_str.starts_with("172.19.")
-            && !ip_str.starts_with("172.2") && !ip_str.starts_with("172.30.")
-            && !ip_str.starts_with("172.31.")
-            && !ip_str.starts_with("192.168.")
-        {
+        if !is_rfc1918(&ip_str) {
             tracing::debug!("discovery: skipping non-private subnet for {}", ip_str);
             continue;
         }
@@ -1117,6 +1129,16 @@ fn arp_lookup(ip: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Check if an IP string is RFC1918 private.
+fn is_rfc1918(ip: &str) -> bool {
+    ip.starts_with("10.")
+        || ip.starts_with("172.16.") || ip.starts_with("172.17.")
+        || ip.starts_with("172.18.") || ip.starts_with("172.19.")
+        || ip.starts_with("172.2") || ip.starts_with("172.30.")
+        || ip.starts_with("172.31.")
+        || ip.starts_with("192.168.")
 }
 
 /// Map a port number to a service name and probe type.
