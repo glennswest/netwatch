@@ -31,6 +31,9 @@
 - **feat:** Orphan devices (no links) placed in a row at the bottom of the map
 - **feat:** `is_virtual` field promoted to top level of `/api/devices` response for easier access
 - **fix:** Container icon color changed from teal (#26a69a) to blue-grey (#78909c) — no longer looks like switches
+- **feat:** Cross-subnet hostname-stem consolidation — multi-homed servers (e.g. data + IPMI on different subnets) auto-merge when PTR hostnames share the same stem (e.g. "server1.g10.lo" + "server1.g11.lo")
+- **fix:** Merged server1/server2 g11 IPMI into g10 data devices with cross-links to both switch10 and switch11
+- **fix:** Deleted bogus switch10→rose1.gw.lo link (same issue as switch11)
 
 ## [v0.4.0] — 2026-03-29
 

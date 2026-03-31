@@ -417,6 +417,38 @@ async fn scan_subnet(
             }
         }
 
+        // Cross-subnet hostname-stem consolidation: if a device named
+        // "server1.g11.lo" is found and "server1.g10.lo" already exists on
+        // a different subnet, merge this IP as additional_ip on the existing
+        // device.  This catches multi-homed servers (e.g. data + IPMI on
+        // different subnets) that don't share an SNMP sysName.
+        // Only consolidate non-infrastructure "Other" devices — infrastructure
+        // like dns.g10.lo vs dns.g11.lo are intentionally separate instances.
+        if name != ip_str && device_type == DeviceType::Other {
+            let stem = name.split('.').next().unwrap_or(&name);
+            if let Ok(Some(existing)) = db.get_device_by_hostname_stem(stem, &ip_str) {
+                if !existing.is_virtual
+                    && existing.device_type == DeviceType::Other
+                    && existing.ip != ip_str
+                    && !existing.additional_ips.contains(&ip_str)
+                {
+                    let mut updated = existing.clone();
+                    updated.additional_ips.push(ip_str.clone());
+                    updated.last_seen = Some(chrono::Utc::now().to_rfc3339());
+                    let _ = db.update_device(existing, updated);
+                    tracing::info!(
+                        "discovery: hostname-stem consolidated {} ({}) as additional IP on {}",
+                        name, ip_str, stem
+                    );
+                    let _ = ws_tx.send(format!(
+                        r#"{{"event":"device_consolidated","ip":"{}","name":"{}"}}"#,
+                        ip_str, name
+                    ));
+                    continue;
+                }
+            }
+        }
+
         let is_infrastructure = device_type.is_infrastructure();
 
         let mut labels = std::collections::HashMap::new();

@@ -140,6 +140,18 @@ impl Db {
         Ok(devices.into_iter().find(|d| d.name == name))
     }
 
+    /// Find a non-virtual device whose hostname stem matches (e.g. "server1"
+    /// matches "server1.g10.lo") but is on a different subnet than `exclude_ip`.
+    pub fn get_device_by_hostname_stem(&self, stem: &str, exclude_ip: &str) -> Result<Option<Device>> {
+        let devices = self.list_devices()?;
+        let exclude_subnet = subnet_prefix(exclude_ip);
+        Ok(devices.into_iter().find(|d| {
+            if d.is_virtual { return false; }
+            if subnet_prefix(&d.ip) == exclude_subnet { return false; }
+            hostname_stem(&d.name) == stem
+        }))
+    }
+
     pub fn insert_device(&self, device: Device) -> Result<()> {
         self.put(DEVICES, &device.id, &device)
     }
@@ -612,4 +624,20 @@ pub async fn retention_loop(db: Arc<Db>, config: Arc<crate::config::Config>) {
             Err(e) => tracing::error!("retention error: {}", e),
         }
     }
+}
+
+/// Extract hostname stem: "server1.g10.lo" → "server1", "192.168.1.5" → "192.168.1.5"
+fn hostname_stem(name: &str) -> &str {
+    // If name looks like an IP, return as-is (no stem to match)
+    if name.chars().next().map_or(true, |c| c.is_ascii_digit()) && name.contains('.') {
+        if name.parse::<std::net::Ipv4Addr>().is_ok() {
+            return name;
+        }
+    }
+    name.split('.').next().unwrap_or(name)
+}
+
+/// Extract /24 subnet prefix: "192.168.10.5" → "192.168.10"
+fn subnet_prefix(ip: &str) -> &str {
+    ip.rsplitn(2, '.').nth(1).unwrap_or(ip)
 }
